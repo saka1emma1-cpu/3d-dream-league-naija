@@ -19,6 +19,8 @@ interface Props {
   isScorer: boolean;
   avatarUrl: string;
   ratingColor: string;
+  faceImageUrl?: string;
+  showLabel?: boolean;
   onSelect: () => void;
 }
 
@@ -40,6 +42,8 @@ export function Player3DModel({
   isScorer,
   avatarUrl,
   ratingColor,
+  faceImageUrl,
+  showLabel = true,
   onSelect,
 }: Props) {
   const groupRef = useRef<THREE.Group>(null);
@@ -184,6 +188,32 @@ export function Player3DModel({
           <meshStandardMaterial color={hairColor} roughness={0.95} />
         </mesh>
 
+        {/* Face image billboard on front of head */}
+        {faceImageUrl && (
+          <Html
+            position={[0, 1.35, 0.23]}
+            center
+            distanceFactor={3}
+            zIndexRange={[5, 0]}
+            pointerEvents="none"
+            transform
+            occlude
+          >
+            <div
+              className="rounded-full overflow-hidden border border-white/20"
+              style={{ width: '40px', height: '40px' }}
+            >
+              <img
+                src={faceImageUrl}
+                alt={playerName}
+                className="w-full h-full object-cover"
+                draggable={false}
+                onError={(e) => { (e.currentTarget.parentElement as HTMLElement).style.display = 'none'; }}
+              />
+            </div>
+          </Html>
+        )}
+
         {/* Neck */}
         <mesh position={[0, 1.15, 0]} castShadow>
           <cylinderGeometry args={[0.08, 0.09, 0.12, 12]} />
@@ -192,7 +222,7 @@ export function Player3DModel({
 
         {/* ===== TORSO ===== */}
         <group ref={torsoRef} position={[0, 0.75, 0]}>
-          {/* Jersey / chest - box */}
+          {/* Jersey / chest - box with slight taper */}
           <mesh position={[0, 0, 0]} castShadow>
             <boxGeometry args={[0.6, 0.75, 0.32]} />
             <meshStandardMaterial
@@ -346,6 +376,7 @@ export function Player3DModel({
       </group>
 
       {/* Html floating label */}
+      {showLabel && (
       <Html
         position={[0, 3.2, 0]}
         center
@@ -375,6 +406,7 @@ export function Player3DModel({
           </div>
         </div>
       </Html>
+      )}
 
       {/* Selection ring */}
       {isSelected && (

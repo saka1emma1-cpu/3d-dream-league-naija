@@ -11,6 +11,7 @@ interface Props {
   players: Player[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  onPlayMatch?: () => void;
 }
 
 export type GamePhase = 'idle' | 'playing' | 'goal';
@@ -203,13 +204,14 @@ function ClickablePlayer({
         isScorer={isScorer}
         avatarUrl={getAvatarUrl(player.name)}
         ratingColor={getRatingColor(ovr)}
+        faceImageUrl={`https://i.pravatar.cc/100?u=${encodeURIComponent(lastName)}`}
         onSelect={() => onSelect(player.id)}
       />
     </group>
   );
 }
 
-function PitchSceneInner({ players, selectedId, onSelect }: Props) {
+function PitchSceneInner({ players, selectedId, onSelect, onPlayMatch }: Props) {
   const [phase, setPhase] = useState<GamePhase>('idle');
   const [scorerId, setScorerId] = useState<string | null>(null);
   const ballPosRef = useRef(new THREE.Vector3(BALL_START[0], BALL_START[1], BALL_START[2]));
@@ -243,6 +245,7 @@ function PitchSceneInner({ players, selectedId, onSelect }: Props) {
 
   const startMatch = () => {
     if (phase === 'idle') {
+      if (onPlayMatch) { onPlayMatch(); return; }
       setPhase('playing');
     } else if (phase === 'playing') {
       setPhase('idle');
@@ -326,7 +329,7 @@ function PitchSceneInner({ players, selectedId, onSelect }: Props) {
                 : phase === 'goal'
                 ? 'bg-amber-600 border-amber-400 text-white hover:bg-amber-500'
                 : 'bg-emerald-600 border-emerald-400 text-white hover:bg-emerald-500 animate-pulse'
-            }`}
+            }`
             style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.5)' }}
           >
             {phase === 'playing' ? 'STOP MATCH' : phase === 'goal' ? 'RESET' : 'PLAY MATCH'}
