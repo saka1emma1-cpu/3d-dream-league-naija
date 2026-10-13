@@ -33,7 +33,6 @@ const FORMATION_433_3D: Record<number, [number, number, number]> = {
 const GOAL_Z = 11;
 const BALL_START: [number, number, number] = [0, 0.15, 0];
 
-// Emma FC team colors (red kit)
 const TEAM_JERSEY = '#D00000';
 const TEAM_SHORTS = '#D00000';
 const TEAM_SOCKS = '#D00000';
@@ -150,7 +149,6 @@ function ClickablePlayer({
   const lastName = player.name.split(' ').pop() || player.name;
   const isScorer = scorerId === player.id;
 
-  // GK gets a different jersey color (yellow/green)
   const jerseyColor = player.position === 'GK' ? '#22c55e' : TEAM_JERSEY;
   const shortsColor = player.position === 'GK' ? '#1a1a1a' : TEAM_SHORTS;
   const socksColor = player.position === 'GK' ? '#1a1a1a' : TEAM_SOCKS;
@@ -276,7 +274,6 @@ function PitchSceneInner({ players, selectedId, onSelect, onPlayMatch }: Props) 
       />
       <directionalLight position={[-8, 10, 5]} intensity={0.3} color="#88aaff" />
 
-      {/* Dark crowd background */}
       <mesh position={[0, 2.5, -16]}>
         <boxGeometry args={[30, 5, 0.5]} />
         <meshStandardMaterial color="#0a0e1a" />
@@ -318,19 +315,17 @@ function PitchSceneInner({ players, selectedId, onSelect, onPlayMatch }: Props) 
 
       <CameraRig phase={phase} />
 
-      {/* Play Match button overlay inside canvas */}
       <Html position={[0, 0, -5]} center distanceFactor={12} zIndexRange={[15, 0]} pointerEvents="none">
         <div style={{ pointerEvents: 'auto' }} className="select-none">
           <button
             onClick={startMatch}
-            className={`px-5 py-2.5 rounded-xl font-bold text-sm border-2 transition active:scale-95 ${
+            className={`px-5 py-2.5 rounded-xl font-bold text-sm border-2 transition active:scale-95 shadow-lg ${
               phase === 'playing'
                 ? 'bg-red-600 border-red-400 text-white hover:bg-red-500'
                 : phase === 'goal'
                 ? 'bg-amber-600 border-amber-400 text-white hover:bg-amber-500'
                 : 'bg-emerald-600 border-emerald-400 text-white hover:bg-emerald-500 animate-pulse'
-            }`
-            style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.5)' }}
+            }`}
           >
             {phase === 'playing' ? 'STOP MATCH' : phase === 'goal' ? 'RESET' : 'PLAY MATCH'}
           </button>
