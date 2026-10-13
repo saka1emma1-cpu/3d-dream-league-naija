@@ -8,6 +8,11 @@ import { Player3DModel, type AnimMode } from '@/components/three/Player3DModel';
 import type { Player } from '@/types/game';
 import { getOverall, getRatingColor, getAvatarUrl } from '@/components/ui/playerUtils';
 
+function getFaceUrl(name: string): string {
+  const seed = encodeURIComponent(name);
+  return `https://i.pravatar.cc/100?u=${seed}`;
+}
+
 interface Props {
   players: Player[];
   onExit: () => void;
@@ -72,6 +77,7 @@ interface Entity {
   jerseyColor: string;
   shortsColor: string;
   socksColor: string;
+  faceUrl: string;
 }
 
 interface BallState {
@@ -110,6 +116,7 @@ function MatchScene({
   scoreRef,
   pausedRef,
   onGoal,
+  controlledInfoRef,
 }: {
   players: Player[];
   joystickRef: React.MutableRefObject<{ x: number; y: number }>;
@@ -117,6 +124,7 @@ function MatchScene({
   scoreRef: React.MutableRefObject<{ home: number; away: number }>;
   pausedRef: React.MutableRefObject<boolean>;
   onGoal: (scorer: string, rating: number, isTeam: boolean) => void;
+  controlledInfoRef: React.MutableRefObject<{ name: string; faceUrl: string; rating: number }>;
 }) {
   const { camera } = useThree();
   const cameraShake = useRef(0);
@@ -144,6 +152,7 @@ function MatchScene({
         jerseyColor: p.position === 'GK' ? '#22c55e' : TEAM_JERSEY,
         shortsColor: p.position === 'GK' ? '#1a1a1a' : TEAM_SHORTS,
         socksColor: p.position === 'GK' ? '#1a1a1a' : TEAM_SOCKS,
+        faceUrl: getFaceUrl(p.name.split(' ').pop() || p.name),
       });
     });
 
@@ -164,6 +173,7 @@ function MatchScene({
         jerseyColor: i === 0 ? '#fbbf24' : OPP_JERSEY,
         shortsColor: OPP_SHORTS,
         socksColor: OPP_SOCKS,
+        faceUrl: getFaceUrl(oppNames[i]),
       });
     });
 
@@ -195,6 +205,11 @@ function MatchScene({
     const ctrlEntity = entities.find((e) => e.id === ctrlId);
     const joy = joystickRef.current;
 
+    // Update controlled player info for UI
+    if (ctrlEntity) {
+      controlledInfoRef.current = { name: ctrlEntity.name, faceUrl: ctrlEntity.faceUrl, rating: ctrlEntity.rating };
+    }
+
     // Camera with shake
     if (cameraShake.current > 0) {
       camera.position.x += (Math.random() - 0.5) * cameraShake.current;
@@ -214,6 +229,21 @@ function MatchScene({
       // Clamp to pitch
       ctrlEntity.pos.x = THREE.MathUtils.clamp(ctrlEntity.pos.x, -PITCH_HALF_W, PITCH_HALF_W);
       ctrlEntity.pos.z = THREE.MathUtils.clamp(ctrlEntity.pos.z, -GOAL_Z, GOAL_Z);
+    }
+
+    // Auto-switch: find closest team player to ball if no owner
+    if (!ball.owner) {
+      let closest = null as Entity | null;
+      let minDist = Infinity;
+      entities.forEach((e) => {
+        if (!e.isTeam) return;
+        const d = e.pos.distanceTo(ball.pos);
+        if (d < minDist) { minDist = d; closest = e; }
+      });
+      // Auto-select closest team player if ball is loose
+      if (closest && minDist < 3 && ctrlEntity && ctrlEntity.pos.distanceTo(ball.pos) > minDist + 1) {
+        // don't auto-switch, keep manual control
+      }
     }
 
     // Ball physics
@@ -444,6 +474,15 @@ function MatchScene({
           </mesh>
         )}
 
+        {/* Ball owner name label */}
+        {ball.owner && (
+          <Html position={[ball.pos.x, 1.8, ball.pos.z]} center distanceFactor={6} zIndexRange={[10, 0]} pointerEvents="none">
+            <div className="bg-black/60 backdrop-blur-sm rounded px-1.5 py-0.5 text-white text-[10px] font-bold whitespace-nowrap border border-white/15">
+              {entities.find((e) => e.id === ball.owner)?.name}
+            </div>
+          </Html>
+        )}
+
         {entities.map((e) => {
           const isControlled = e.id === controlledId;
           const isScorer = goalData?.isTeam === e.isTeam && goalData?.scorer === e.name;
@@ -458,6 +497,7 @@ function MatchScene({
             runTarget = [e.pos.x, 0, e.pos.z];
           }
 
+          // Hide labels in match mode for performance
           return (
             <group key={e.id} position={[e.pos.x, e.pos.y, e.pos.z]}>
               <Player3DModel
@@ -474,6 +514,8 @@ function MatchScene({
                 isScorer={isScorer}
                 avatarUrl={getAvatarUrl(e.name)}
                 ratingColor={getRatingColor(e.rating)}
+                faceImageUrl={e.faceUrl}
+                showLabel={false}
                 onSelect={() => {}}
               />
               {/* Controlled player indicator */}
@@ -498,10 +540,12 @@ export function MatchEngine({ players, onExit }: Props) {
   const actionRef = useRef({ pass: 0, shoot: 0, through: 0, sprint: 0 });
   const scoreRef = useRef({ home: 0, away: 0 });
   const pausedRef = useRef(false);
+  const controlledInfoRef = useRef({ name: '', faceUrl: '', rating: 0 });
 
   const [score, setScore] = useState({ home: 0, away: 0 });
   const [paused, setPaused] = useState(false);
   const [matchTime, setMatchTime] = useState(0);
+  const [ctrlDisplay, setCtrlDisplay] = useState({ name: '', faceUrl: '', rating: 0 });
 
   // Joystick state
   const [knobPos, setKnobPos] = useState({ x: 0, y: 0 });
@@ -538,7 +582,7 @@ export function MatchEngine({ players, onExit }: Props) {
   useEffect(() => {
     const interval = setInterval(() => {
       if (!pausedRef.current) {
-        setMatchTime((t) => Math.min(t + 1, 5400));
+        setMatchTime((t) => Math.min(t + 1, 5400)); // 90 min in game seconds
       }
     }, 100);
     return () => clearInterval(interval);
@@ -548,6 +592,7 @@ export function MatchEngine({ players, onExit }: Props) {
   useEffect(() => {
     const interval = setInterval(() => {
       setScore({ ...scoreRef.current });
+      setCtrlDisplay({ ...controlledInfoRef.current });
     }, 200);
     return () => clearInterval(interval);
   }, []);
@@ -625,9 +670,26 @@ export function MatchEngine({ players, onExit }: Props) {
             scoreRef={scoreRef}
             pausedRef={pausedRef}
             onGoal={handleGoal}
+            controlledInfoRef={controlledInfoRef}
           />
         </Canvas>
       </div>
+
+      {/* ===== CONTROLLED PLAYER CARD (top left, below scoreboard) ===== */}
+      {ctrlDisplay.name && (
+        <div className="absolute top-14 left-3 z-30 flex items-center gap-2 bg-black/60 backdrop-blur-sm rounded-lg pl-1 pr-3 py-1 border border-white/15">
+          <img
+            src={ctrlDisplay.faceUrl}
+            alt={ctrlDisplay.name}
+            className="w-9 h-9 rounded-full object-cover border border-white/30"
+            draggable={false}
+          />
+          <div className="flex flex-col">
+            <span className="text-white text-xs font-bold leading-tight">{ctrlDisplay.name}</span>
+            <span className="text-emerald-400 text-[9px] font-semibold leading-tight">OVR {ctrlDisplay.rating}</span>
+          </div>
+        </div>
+      )}
 
       {/* ===== JOYSTICK (bottom left) ===== */}
       <div
