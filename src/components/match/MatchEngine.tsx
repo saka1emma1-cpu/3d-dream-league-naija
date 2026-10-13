@@ -6,19 +6,13 @@ import { ChevronLeft, Pause, Play } from 'lucide-react';
 import { Pitch3D } from '@/components/three/Pitch3D';
 import { Player3DModel, type AnimMode } from '@/components/three/Player3DModel';
 import type { Player } from '@/types/game';
-import { getOverall, getRatingColor, getAvatarUrl } from '@/components/ui/playerUtils';
-
-function getFaceUrl(name: string): string {
-  const seed = encodeURIComponent(name);
-  return `https://i.pravatar.cc/100?u=${seed}`;
-}
+import { getOverall, getRatingColor, getAvatarUrl, getFaceUrl, getJerseyNumber } from '@/components/ui/playerUtils';
 
 interface Props {
   players: Player[];
   onExit: () => void;
 }
 
-// Formation positions for Emma FC (attacking upward, +Z)
 const FORMATION_433: Record<number, [number, number, number]> = {
   0: [0, 0, -10],
   1: [-5.5, 0, -6],
@@ -33,7 +27,6 @@ const FORMATION_433: Record<number, [number, number, number]> = {
   10: [3, 0, 4],
 };
 
-// Opponent formation (attacking downward, -Z)
 const OPP_FORMATION: [number, number, number][] = [
   [0, 0, 10],
   [-5.5, 0, 6],
@@ -78,6 +71,7 @@ interface Entity {
   shortsColor: string;
   socksColor: string;
   faceUrl: string;
+  jerseyNumber: number;
 }
 
 interface BallState {
@@ -90,7 +84,7 @@ interface BallState {
   shotEnd: THREE.Vector3;
 }
 
-function GoalText({ scorer, rating }: { scorer: string; rating: number }) {
+function GoalText({ scorer, rating, faceUrl }: { scorer: string; rating: number; faceUrl: string }) {
   const [scale, setScale] = useState(0.5);
   useFrame((state) => {
     setScale(1 + Math.sin(state.clock.elapsedTime * 4) * 0.15);
@@ -101,8 +95,17 @@ function GoalText({ scorer, rating }: { scorer: string; rating: number }) {
         <div className="text-5xl font-black text-yellow-400 tracking-wider" style={{ textShadow: '3px 3px 0 #000, -1px -1px 0 #000' }}>
           GOOOAL!
         </div>
-        <div className="text-xl font-bold text-white mt-1" style={{ textShadow: '2px 2px 0 #000' }}>
-          {scorer} {rating}
+        <div className="flex items-center gap-2 mt-2 bg-black/70 rounded-xl px-3 py-1.5 border border-white/20">
+          <img
+            src={faceUrl}
+            alt={scorer}
+            className="w-10 h-10 rounded-full object-cover border-2 border-white/70"
+            draggable={false}
+          />
+          <div className="flex flex-col">
+            <span className="text-white text-base font-bold leading-tight" style={{ textShadow: '2px 2px 0 #000' }}>{scorer}</span>
+            <span className="text-yellow-400 text-xs font-black leading-tight">OVR {rating}</span>
+          </div>
         </div>
       </div>
     </Html>
@@ -123,14 +126,13 @@ function MatchScene({
   actionRef: React.MutableRefObject<{ pass: number; shoot: number; through: number; sprint: number }>;
   scoreRef: React.MutableRefObject<{ home: number; away: number }>;
   pausedRef: React.MutableRefObject<boolean>;
-  onGoal: (scorer: string, rating: number, isTeam: boolean) => void;
+  onGoal: (scorer: string; rating: number, isTeam: boolean) => void;
   controlledInfoRef: React.MutableRefObject<{ name: string; faceUrl: string; rating: number }>;
 }) {
   const { camera } = useThree();
   const cameraShake = useRef(0);
   const sprintTimer = useRef(0);
 
-  // Build entities once
   const entities = useMemo(() => {
     const team = players.filter((p) => p.slot >= 0).sort((a, b) => a.slot - b.slot);
     const list: Entity[] = [];
@@ -152,11 +154,11 @@ function MatchScene({
         jerseyColor: p.position === 'GK' ? '#22c55e' : TEAM_JERSEY,
         shortsColor: p.position === 'GK' ? '#1a1a1a' : TEAM_SHORTS,
         socksColor: p.position === 'GK' ? '#1a1a1a' : TEAM_SOCKS,
-        faceUrl: getFaceUrl(p.name.split(' ').pop() || p.name),
+        faceUrl: getFaceUrl(p.name),
+        jerseyNumber: getJerseyNumber(p.slot),
       });
     });
 
-    // Opponents
     const oppNames = ['Martinez', 'Lopez', 'Garcia', 'Silva', 'Costa', 'Fernandes', 'Vega', 'Pinto', 'Ramos', 'Diaz', 'Santos'];
     OPP_FORMATION.forEach((pos, i) => {
       const seed = hashId('opp' + i);
@@ -174,6 +176,7 @@ function MatchScene({
         shortsColor: OPP_SHORTS,
         socksColor: OPP_SOCKS,
         faceUrl: getFaceUrl(oppNames[i]),
+        jerseyNumber: i + 1,
       });
     });
 
@@ -190,7 +193,7 @@ function MatchScene({
     shotEnd: new THREE.Vector3(),
   });
 
-  const [goalData, setGoalData] = useState<{ scorer: string; rating: number; isTeam: boolean } | null>(null);
+  const [goalData, setGoalData] = useState<{ scorer: string; rating: number; isTeam: boolean; faceUrl: string } | null>(null);
   const [controlledId, setControlledId] = useState<string>(
     players.filter((p) => p.slot >= 0).sort((a, b) => a.slot - b.slot).find((p) => p.position === 'FWD')?.id ?? ''
   );
@@ -205,12 +208,10 @@ function MatchScene({
     const ctrlEntity = entities.find((e) => e.id === ctrlId);
     const joy = joystickRef.current;
 
-    // Update controlled player info for UI
     if (ctrlEntity) {
       controlledInfoRef.current = { name: ctrlEntity.name, faceUrl: ctrlEntity.faceUrl, rating: ctrlEntity.rating };
     }
 
-    // Camera with shake
     if (cameraShake.current > 0) {
       camera.position.x += (Math.random() - 0.5) * cameraShake.current;
       camera.position.y += (Math.random() - 0.5) * cameraShake.current;
@@ -218,35 +219,16 @@ function MatchScene({
       if (cameraShake.current < 0.01) cameraShake.current = 0;
     }
 
-    // Sprint timer
     if (sprintTimer.current > 0) sprintTimer.current -= delta;
 
-    // Move controlled player by joystick
     if (ctrlEntity) {
       const speed = sprintTimer.current > 0 ? 0.22 : 0.11;
       ctrlEntity.pos.x += joy.x * speed;
       ctrlEntity.pos.z += joy.y * speed;
-      // Clamp to pitch
       ctrlEntity.pos.x = THREE.MathUtils.clamp(ctrlEntity.pos.x, -PITCH_HALF_W, PITCH_HALF_W);
       ctrlEntity.pos.z = THREE.MathUtils.clamp(ctrlEntity.pos.z, -GOAL_Z, GOAL_Z);
     }
 
-    // Auto-switch: find closest team player to ball if no owner
-    if (!ball.owner) {
-      let closest = null as Entity | null;
-      let minDist = Infinity;
-      entities.forEach((e) => {
-        if (!e.isTeam) return;
-        const d = e.pos.distanceTo(ball.pos);
-        if (d < minDist) { minDist = d; closest = e; }
-      });
-      // Auto-select closest team player if ball is loose
-      if (closest && minDist < 3 && ctrlEntity && ctrlEntity.pos.distanceTo(ball.pos) > minDist + 1) {
-        // don't auto-switch, keep manual control
-      }
-    }
-
-    // Ball physics
     if (ball.isShot) {
       ball.shotProgress += delta * 1.5;
       const p = Math.min(ball.shotProgress, 1);
@@ -260,7 +242,6 @@ function MatchScene({
         ball.vel.set(0, 0, 0);
       }
 
-      // GK save attempt
       const targetGK = entities.find((e) => !e.isTeam && e.position === 'GK');
       if (targetGK && Math.random() < 0.4 && p > 0.3 && p < 0.7) {
         if (Math.abs(ball.pos.x - targetGK.pos.x) < 1.5 && Math.abs(ball.pos.z - targetGK.pos.z) < 1) {
@@ -273,18 +254,15 @@ function MatchScene({
     } else if (ball.owner) {
       const owner = entities.find((e) => e.id === ball.owner);
       if (owner) {
-        // Ball follows owner
         ball.pos.x = owner.pos.x;
         ball.pos.z = owner.pos.z + (owner.isTeam ? 0.3 : -0.3);
         ball.pos.y = 0.15;
 
-        // Opponent AI: dribble toward team goal
         if (!owner.isTeam) {
           owner.pos.z -= 0.06 + (owner.rating - 60) * 0.002;
           owner.pos.x += Math.sin(t * 2 + owner.seed) * 0.05;
           owner.pos.x = THREE.MathUtils.clamp(owner.pos.x, -PITCH_HALF_W, PITCH_HALF_W);
 
-          // Shoot at team goal
           if (owner.pos.z < -7 && Math.random() < 0.01) {
             ball.isShot = true;
             ball.shotProgress = 0;
@@ -297,12 +275,10 @@ function MatchScene({
         ball.owner = null;
       }
     } else {
-      // Loose ball - apply velocity
       ball.pos.add(ball.vel);
       ball.vel.multiplyScalar(0.95);
       ball.pos.y = 0.15;
 
-      // Check possession
       entities.forEach((e) => {
         if (ball.owner) return;
         const d = e.pos.distanceTo(ball.pos);
@@ -313,16 +289,14 @@ function MatchScene({
       });
     }
 
-    // Goal detection
     if (ball.pos.z >= GOAL_Z - 0.7 && Math.abs(ball.pos.x) < 1.5 && ball.pos.y < 1.5 && !ball.isShot) {
-      // Team scored
       scoreRef.current.home++;
       const scorer = ctrlEntity?.name ?? 'Obi';
       const rating = ctrlEntity?.rating ?? 71;
       cameraShake.current = 0.3;
-      setGoalData({ scorer, rating, isTeam: true });
+      const faceUrl = ctrlEntity?.faceUrl ?? '';
+      setGoalData({ scorer, rating, isTeam: true, faceUrl });
       onGoal(scorer, rating, true);
-      // Reset
       ball.pos.set(0, 0.15, 0);
       ball.vel.set(0, 0, 0);
       ball.owner = null;
@@ -331,10 +305,10 @@ function MatchScene({
       setTimeout(() => setGoalData(null), 3500);
     }
     if (ball.pos.z <= OPP_GOAL_Z + 0.7 && Math.abs(ball.pos.x) < 1.5 && ball.pos.y < 1.5 && !ball.isShot) {
-      // Opponent scored
       scoreRef.current.away++;
       cameraShake.current = 0.3;
-      setGoalData({ scorer: 'Diaz', rating: 68, isTeam: false });
+      const oppEntity = entities.find((e) => e.name === 'Diaz');
+      setGoalData({ scorer: 'Diaz', rating: 68, isTeam: false, faceUrl: oppEntity?.faceUrl ?? '' });
       onGoal('Diaz', 68, false);
       ball.pos.set(0, 0.15, 0);
       ball.vel.set(0, 0, 0);
@@ -344,35 +318,27 @@ function MatchScene({
       setTimeout(() => setGoalData(null), 3500);
     }
 
-    // Non-controlled entity AI
     entities.forEach((e) => {
       if (e.id === ctrlId) return;
 
       if (e.isTeam) {
-        // Team AI: return to formation, but support attack
         if (ball.owner === e.id) {
-          // Has ball - move forward
           e.pos.z += 0.04;
         } else {
-          // Move toward base but shift slightly toward ball
           const targetX = e.basePos.x + (ball.pos.x - e.basePos.x) * 0.15;
           const targetZ = e.basePos.z + (ball.pos.z - e.basePos.z) * 0.1;
           e.pos.x += (targetX - e.pos.x) * 0.03;
           e.pos.z += (targetZ - e.pos.z) * 0.03;
         }
       } else {
-        // Opponent AI: chase ball or mark
         const distToBall = e.pos.distanceTo(ball.pos);
         if (distToBall < 4 && !ball.owner) {
-          // Chase ball
           const dir = ball.pos.clone().sub(e.pos).normalize();
           e.pos.x += dir.x * 0.05;
           e.pos.z += dir.z * 0.05;
         } else if (ball.owner && !ball.isTeam && ball.owner.startsWith('opp')) {
-          // Support attack
           e.pos.z -= 0.03;
         } else {
-          // Return to formation
           e.pos.x += (e.basePos.x - e.pos.x) * 0.02;
           e.pos.z += (e.basePos.z - e.pos.z) * 0.02;
         }
@@ -381,12 +347,10 @@ function MatchScene({
       e.pos.z = THREE.MathUtils.clamp(e.pos.z, -GOAL_Z, GOAL_Z);
     });
 
-    // Handle actions
     const act = actionRef.current;
     if (act.pass > 0) {
       act.pass = 0;
       if (ball.owner && ball.owner === ctrlId) {
-        // Pass to nearest teammate
         let nearest = null as Entity | null;
         let minD = Infinity;
         entities.forEach((e) => {
@@ -426,7 +390,6 @@ function MatchScene({
       sprintTimer.current = 2;
     }
 
-    // Camera follows ball
     const camTargetX = ball.pos.x * 0.3;
     const camTargetY = 11;
     const camTargetZ = ball.pos.z * 0.2 - 14;
@@ -436,7 +399,6 @@ function MatchScene({
     camera.lookAt(ball.pos.x * 0.3, 0, ball.pos.z * 0.3);
   });
 
-  // Render ball
   const ball = ballState.current;
 
   return (
@@ -451,7 +413,6 @@ function MatchScene({
         shadow-camera-top={15} shadow-camera-bottom={-15} />
       <directionalLight position={[-8, 10, 5]} intensity={0.3} color="#88aaff" />
 
-      {/* Crowd */}
       <mesh position={[0, 2.5, -16]}><boxGeometry args={[30, 5, 0.5]} /><meshStandardMaterial color="#0a0e1a" /></mesh>
       <mesh position={[0, 2.5, 16]}><boxGeometry args={[30, 5, 0.5]} /><meshStandardMaterial color="#0a0e1a" /></mesh>
       <mesh position={[-16, 2.5, 0]}><boxGeometry args={[0.5, 5, 32]} /><meshStandardMaterial color="#0a0e1a" /></mesh>
@@ -460,13 +421,11 @@ function MatchScene({
       <Suspense fallback={null}>
         <Pitch3D />
 
-        {/* Ball */}
         <mesh position={[ball.pos.x, ball.pos.y, ball.pos.z]} castShadow>
           <sphereGeometry args={[0.18, 16, 16]} />
           <meshStandardMaterial color="#ffffff" roughness={0.4} />
         </mesh>
 
-        {/* Ball control indicator */}
         {ball.owner && (
           <mesh rotation={[-Math.PI / 2, 0, 0]} position={[ball.pos.x, 0.02, ball.pos.z]}>
             <ringGeometry args={[0.5, 0.65, 24]} />
@@ -474,7 +433,6 @@ function MatchScene({
           </mesh>
         )}
 
-        {/* Ball owner name label */}
         {ball.owner && (
           <Html position={[ball.pos.x, 1.8, ball.pos.z]} center distanceFactor={6} zIndexRange={[10, 0]} pointerEvents="none">
             <div className="bg-black/60 backdrop-blur-sm rounded px-1.5 py-0.5 text-white text-[10px] font-bold whitespace-nowrap border border-white/15">
@@ -497,7 +455,6 @@ function MatchScene({
             runTarget = [e.pos.x, 0, e.pos.z];
           }
 
-          // Hide labels in match mode for performance
           return (
             <group key={e.id} position={[e.pos.x, e.pos.y, e.pos.z]}>
               <Player3DModel
@@ -515,10 +472,10 @@ function MatchScene({
                 avatarUrl={getAvatarUrl(e.name)}
                 ratingColor={getRatingColor(e.rating)}
                 faceImageUrl={e.faceUrl}
+                jerseyNumber={e.jerseyNumber}
                 showLabel={false}
                 onSelect={() => {}}
               />
-              {/* Controlled player indicator */}
               {isControlled && (
                 <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
                   <ringGeometry args={[0.9, 1.05, 32]} />
@@ -529,7 +486,7 @@ function MatchScene({
           );
         })}
 
-        {goalData && <GoalText scorer={goalData.scorer} rating={goalData.rating} />}
+        {goalData && <GoalText scorer={goalData.scorer} rating={goalData.rating} faceUrl={goalData.faceUrl} />}
       </Suspense>
     </>
   );
@@ -546,8 +503,8 @@ export function MatchEngine({ players, onExit }: Props) {
   const [paused, setPaused] = useState(false);
   const [matchTime, setMatchTime] = useState(0);
   const [ctrlDisplay, setCtrlDisplay] = useState({ name: '', faceUrl: '', rating: 0 });
+  const [goalDisplay, setGoalDisplay] = useState<{ scorer: string; rating: number; faceUrl: string } | null>(null);
 
-  // Joystick state
   const [knobPos, setKnobPos] = useState({ x: 0, y: 0 });
   const [joyActive, setJoyActive] = useState(false);
   const joyCenter = useRef({ x: 0, y: 0 });
@@ -578,17 +535,15 @@ export function MatchEngine({ players, onExit }: Props) {
     joystickRef.current.y = 0;
   }, []);
 
-  // Match timer
   useEffect(() => {
     const interval = setInterval(() => {
       if (!pausedRef.current) {
-        setMatchTime((t) => Math.min(t + 1, 5400)); // 90 min in game seconds
+        setMatchTime((t) => Math.min(t + 1, 5400));
       }
     }, 100);
     return () => clearInterval(interval);
   }, []);
 
-  // Sync score display
   useEffect(() => {
     const interval = setInterval(() => {
       setScore({ ...scoreRef.current });
@@ -597,8 +552,21 @@ export function MatchEngine({ players, onExit }: Props) {
     return () => clearInterval(interval);
   }, []);
 
+  const goalOverlayRef = useRef<{ scorer: string; rating: number; faceUrl: string } | null>(null);
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (goalOverlayRef.current) {
+        setGoalDisplay({ ...goalOverlayRef.current });
+        goalOverlayRef.current = null;
+      }
+    }, 100);
+    return () => clearInterval(interval);
+  }, []);
+
   const handleGoal = useCallback((scorer: string, rating: number, isTeam: boolean) => {
-    // Score already updated in scene
+    const faceUrl = controlledInfoRef.current.name === scorer ? controlledInfoRef.current.faceUrl : '';
+    goalOverlayRef.current = { scorer, rating, faceUrl };
+    setTimeout(() => setGoalDisplay(null), 3500);
   }, []);
 
   const formatTime = (seconds: number) => {
@@ -613,10 +581,8 @@ export function MatchEngine({ players, onExit }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 bg-[#0a3a15] flex flex-col select-none">
-      {/* ===== SCOREBOARD BAR ===== */}
       <div className="absolute top-0 left-0 right-0 z-30 bg-black/70 backdrop-blur-sm">
         <div className="flex items-center justify-between px-3 py-2">
-          {/* Left: back + score */}
           <div className="flex items-center gap-2">
             <button onClick={onExit} className="text-white/80 hover:text-white p-1">
               <ChevronLeft className="w-5 h-5" />
@@ -630,7 +596,6 @@ export function MatchEngine({ players, onExit }: Props) {
             </div>
           </div>
 
-          {/* Center: timer + banner */}
           <div className="flex flex-col items-center">
             <div className="text-red-500 font-black text-sm tabular-nums">
               {formatTime(matchTime)}
@@ -639,7 +604,6 @@ export function MatchEngine({ players, onExit }: Props) {
             <div className="text-[7px] text-white/40 font-semibold tracking-wider">FOOTBALL LEAGUE 26</div>
           </div>
 
-          {/* Right: pause */}
           <button
             onClick={() => { setPaused(!paused); pausedRef.current = !paused; }}
             className="text-white/80 hover:text-white p-1"
@@ -647,7 +611,6 @@ export function MatchEngine({ players, onExit }: Props) {
             {paused ? <Play className="w-5 h-5" /> : <Pause className="w-5 h-5" />}
           </button>
         </div>
-        {/* Scrolling banner */}
         <div className="overflow-hidden h-3 bg-black/50">
           <div className="whitespace-nowrap text-[8px] text-white/30 font-semibold animate-marquee">
             FOOTBALL LEAGUE 26 &bull; EMMA FC vs ARGENTINA &bull; LIVE FROM LAGOS &bull; FOOTBALL LEAGUE 26 &bull; EMMA FC vs ARGENTINA &bull; LIVE FROM LAGOS &bull;
@@ -655,7 +618,6 @@ export function MatchEngine({ players, onExit }: Props) {
         </div>
       </div>
 
-      {/* ===== 3D CANVAS ===== */}
       <div className="flex-1 relative">
         <Canvas
           shadows
@@ -675,7 +637,6 @@ export function MatchEngine({ players, onExit }: Props) {
         </Canvas>
       </div>
 
-      {/* ===== CONTROLLED PLAYER CARD (top left, below scoreboard) ===== */}
       {ctrlDisplay.name && (
         <div className="absolute top-14 left-3 z-30 flex items-center gap-2 bg-black/60 backdrop-blur-sm rounded-lg pl-1 pr-3 py-1 border border-white/15">
           <img
@@ -691,7 +652,22 @@ export function MatchEngine({ players, onExit }: Props) {
         </div>
       )}
 
-      {/* ===== JOYSTICK (bottom left) ===== */}
+      {goalDisplay && (
+        <div className="absolute bottom-32 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 bg-black/80 backdrop-blur-md rounded-2xl px-4 py-2.5 border-2 border-yellow-400/50 animate-pulse">
+          <img
+            src={goalDisplay.faceUrl || ctrlDisplay.faceUrl}
+            alt={goalDisplay.scorer}
+            className="w-14 h-14 rounded-full object-cover border-2 border-yellow-400/80"
+            draggable={false}
+          />
+          <div className="flex flex-col">
+            <span className="text-yellow-400 text-lg font-black leading-tight" style={{ textShadow: '2px 2px 0 #000' }}>GOOOAL!</span>
+            <span className="text-white text-sm font-bold leading-tight">{goalDisplay.scorer}</span>
+            <span className="text-yellow-400 text-xs font-black leading-tight">OVR {goalDisplay.rating}</span>
+          </div>
+        </div>
+      )}
+
       <div
         className="absolute bottom-6 left-6 z-30"
         onTouchStart={(e) => { e.preventDefault(); const t = e.changedTouches[0]; handleJoyStart(t.clientX, t.clientY); }}
@@ -705,7 +681,6 @@ export function MatchEngine({ players, onExit }: Props) {
           />
         </div>
       </div>
-      {/* Joystick global listeners */}
       <div
         className="fixed inset-0 z-20 pointer-events-none"
         onTouchMove={(e) => { if (joyActive) { const t = e.touches[0]; handleJoyMove(t.clientX, t.clientY); } }}
@@ -714,24 +689,19 @@ export function MatchEngine({ players, onExit }: Props) {
         onMouseUp={() => joyActive && handleJoyEnd()}
       />
 
-      {/* ===== ACTION BUTTONS (bottom right) ===== */}
       <div className="absolute bottom-6 right-6 z-30 flex flex-col items-center gap-2">
-        {/* SHOOT - biggest, top */}
         <button
           onClick={() => doAction('shoot')}
           className="w-[90px] h-[90px] rounded-full bg-black/45 border-4 border-yellow-400/60 text-white font-bold text-xs flex items-center justify-center active:scale-90 hover:bg-black/60 transition shadow-lg"
-          style={{ boxShadow: '0 0 12px rgba(250,204,21,0.3)' }}
         >
           SHOOT
         </button>
-        {/* THROUGH - middle */}
         <button
           onClick={() => doAction('through')}
           className="w-[78px] h-[78px] rounded-full bg-black/45 border-2 border-white/30 text-white font-bold text-[11px] flex items-center justify-center active:scale-90 hover:bg-black/60 transition"
         >
           THROUGH
         </button>
-        {/* PASS + SPRINT - bottom row */}
         <div className="flex gap-2">
           <button
             onClick={() => doAction('pass')}
@@ -748,7 +718,6 @@ export function MatchEngine({ players, onExit }: Props) {
         </div>
       </div>
 
-      {/* Pause overlay */}
       {paused && (
         <div className="absolute inset-0 z-40 bg-black/60 backdrop-blur-sm flex items-center justify-center">
           <div className="flex flex-col items-center gap-4">

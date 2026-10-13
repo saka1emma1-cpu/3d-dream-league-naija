@@ -20,6 +20,7 @@ interface Props {
   avatarUrl: string;
   ratingColor: string;
   faceImageUrl?: string;
+  jerseyNumber?: number;
   showLabel?: boolean;
   onSelect: () => void;
 }
@@ -43,6 +44,7 @@ export function Player3DModel({
   avatarUrl,
   ratingColor,
   faceImageUrl,
+  jerseyNumber,
   showLabel = true,
   onSelect,
 }: Props) {
@@ -188,20 +190,20 @@ export function Player3DModel({
           <meshStandardMaterial color={hairColor} roughness={0.95} />
         </mesh>
 
-        {/* Face image billboard on front of head */}
+        {/* Face image billboard on front of head - larger, always faces camera */}
         {faceImageUrl && (
           <Html
-            position={[0, 1.35, 0.23]}
+            position={[0, 1.36, 0.22]}
             center
-            distanceFactor={3}
-            zIndexRange={[5, 0]}
+            distanceFactor={2.5}
+            zIndexRange={[8, 0]}
             pointerEvents="none"
             transform
             occlude
           >
             <div
-              className="rounded-full overflow-hidden border border-white/20"
-              style={{ width: '40px', height: '40px' }}
+              className="rounded-full overflow-hidden border-2 border-white/70"
+              style={{ width: '56px', height: '56px', boxShadow: '0 2px 8px rgba(0,0,0,0.4)' }}
             >
               <img
                 src={faceImageUrl}
@@ -245,6 +247,31 @@ export function Player3DModel({
             <planeGeometry args={[0.2, 0.25]} />
             <meshBasicMaterial color="#ffffff" transparent opacity={0.85} />
           </mesh>
+
+          {/* OVR badge on chest front */}
+          <Html
+            position={[0, 0.05, 0.18]}
+            center
+            distanceFactor={4}
+            zIndexRange={[6, 0]}
+            pointerEvents="none"
+            transform
+            occlude
+          >
+            <div className="flex items-center gap-0.5 select-none" style={{ pointerEvents: 'none' }}>
+              <div
+                className="w-5 h-5 rounded-full flex items-center justify-center text-[7px] font-black border border-white/80"
+                style={{ background: ratingColor, color: '#0a0e1a' }}
+              >
+                {rating}
+              </div>
+              {jerseyNumber !== undefined && (
+                <div className="text-white text-[8px] font-black leading-none" style={{ textShadow: '1px 1px 0 #000' }}>
+                  #{jerseyNumber}
+                </div>
+              )}
+            </div>
+          </Html>
         </group>
 
         {/* ===== LEFT ARM ===== */}

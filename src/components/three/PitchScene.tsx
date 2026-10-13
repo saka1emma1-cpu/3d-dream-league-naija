@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { Pitch3D } from './Pitch3D';
 import { Player3DModel, type AnimMode } from './Player3DModel';
 import type { Player } from '@/types/game';
-import { getOverall, getRatingColor, getAvatarUrl } from '@/components/ui/playerUtils';
+import { getOverall, getRatingColor, getAvatarUrl, getFaceUrl, getJerseyNumber } from '@/components/ui/playerUtils';
 
 interface Props {
   players: Player[];
@@ -202,7 +202,8 @@ function ClickablePlayer({
         isScorer={isScorer}
         avatarUrl={getAvatarUrl(player.name)}
         ratingColor={getRatingColor(ovr)}
-        faceImageUrl={`https://i.pravatar.cc/100?u=${encodeURIComponent(lastName)}`}
+        faceImageUrl={getFaceUrl(player.name)}
+        jerseyNumber={getJerseyNumber(player.slot)}
         onSelect={() => onSelect(player.id)}
       />
     </group>

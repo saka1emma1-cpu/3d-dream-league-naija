@@ -54,6 +54,49 @@ export function getAvatarUrl(name: string): string {
   return `https://api.dicebear.com/9.x/adventurer/svg?seed=${seed}&backgroundColor=b6e3f4,c0aede,d1d4f9&skinColor=8d5524,a86e3c,c68642`;
 }
 
+const FACE_MAP: Record<string, number> = {
+  'Okafor': 33,
+  'Bello': 12,
+  'Nwosu': 8,
+  'Mohammed': 14,
+  'Ajayi': 15,
+  'Adebayo': 16,
+  'Musa': 17,
+  'Eze': 18,
+  'Okoro': 33,
+  'Obi': 51,
+  'Lawal': 60,
+  'Osimhen': 36,
+  'Lookman': 28,
+  'Simon': 24,
+  'Onyeka': 31,
+  'Nwabali': 45,
+  'Sanusi': 50,
+  'Chukwueze': 11,
+  'Awoniyi': 38,
+  'Bassey': 42,
+  'Aribo': 44,
+  'Onyedika': 49,
+  'Osayi-Samuel': 53,
+};
+
+export function getFaceUrl(name: string): string {
+  const lastName = name.split(' ').pop() || name;
+  const imgNum = FACE_MAP[lastName] ?? Math.abs(hashString(lastName)) % 70 + 1;
+  return `https://i.pravatar.cc/150?img=${imgNum}`;
+}
+
+export function getJerseyNumber(slot: number): number {
+  const numbers = [1, 2, 3, 4, 5, 6, 8, 10, 7, 9, 11];
+  return numbers[slot] ?? slot + 1;
+}
+
+function hashString(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  return h;
+}
+
 export function getPlayerHeight(seed: number): string {
   const heights = ["5'9\"", "5'10\"", "5'11\"", "6'0\"", "6'1\"", "6'2\""];
   return heights[seed % heights.length];
