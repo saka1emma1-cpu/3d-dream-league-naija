@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { Pitch3D } from './Pitch3D';
 import { Player3DModel, type AnimMode } from './Player3DModel';
 import type { Player } from '@/types/game';
-import { getOverall, getJerseyColor, getRatingColor, getAvatarUrl } from '@/components/ui/playerUtils';
+import { getOverall, getRatingColor, getAvatarUrl } from '@/components/ui/playerUtils';
 
 interface Props {
   players: Player[];
@@ -30,7 +30,12 @@ const FORMATION_433_3D: Record<number, [number, number, number]> = {
 };
 
 const GOAL_Z = 11;
-const BALL_START: [number, number, number] = [0, 0.3, 0];
+const BALL_START: [number, number, number] = [0, 0.15, 0];
+
+// Emma FC team colors (red kit)
+const TEAM_JERSEY = '#D00000';
+const TEAM_SHORTS = '#D00000';
+const TEAM_SOCKS = '#D00000';
 
 function hashId(id: string): number {
   let h = 0;
@@ -40,28 +45,27 @@ function hashId(id: string): number {
 
 function CameraRig({ phase }: { phase: GamePhase }) {
   const targetPos = useMemo(() => {
-    if (phase === 'playing' || phase === 'goal') return new THREE.Vector3(0, 8, 3);
-    return new THREE.Vector3(0, 9, 6.5);
+    if (phase === 'playing' || phase === 'goal') return new THREE.Vector3(0, 10, -13);
+    return new THREE.Vector3(0, 11, -14);
   }, [phase]);
-  const targetLook = useMemo(() => new THREE.Vector3(0, 0, 0), []);
-  const lookAtVec = useRef(new THREE.Vector3(0, 9, 6.5));
+  const targetLook = useMemo(() => new THREE.Vector3(0, 0, 3), []);
+  const lookAtVec = useRef(new THREE.Vector3(0, 0, 3));
 
   useFrame((state) => {
-    state.camera.position.lerp(targetPos, 0.05);
-    lookAtVec.current.lerp(targetLook, 0.05);
+    state.camera.position.lerp(targetPos, 0.04);
+    lookAtVec.current.lerp(targetLook, 0.04);
     state.camera.lookAt(lookAtVec.current);
   });
 
   return null;
 }
 
-function Ball({ phase, onGoal }: { phase: GamePhase; onGoal: () => void }) {
+function Ball({ phase, onGoal, ballPosRef }: { phase: GamePhase; onGoal: () => void; ballPosRef: React.MutableRefObject<THREE.Vector3> }) {
   const ballRef = useRef<THREE.Mesh>(null);
-  const ballPos = useRef(new THREE.Vector3(BALL_START[0], BALL_START[1], BALL_START[2]));
   const goalTriggered = useRef(false);
 
   useEffect(() => {
-    ballPos.current.set(BALL_START[0], BALL_START[1], BALL_START[2]);
+    ballPosRef.current.set(BALL_START[0], BALL_START[1], BALL_START[2]);
     goalTriggered.current = false;
   }, [phase]);
 
@@ -70,29 +74,29 @@ function Ball({ phase, onGoal }: { phase: GamePhase; onGoal: () => void }) {
     const t = state.clock.elapsedTime;
 
     if (phase === 'playing') {
-      ballPos.current.z += 0.08;
-      ballPos.current.x = Math.sin(t * 1.5) * 1.5;
-      ballPos.current.y = 0.3 + Math.abs(Math.sin(t * 6)) * 0.15;
+      ballPosRef.current.z += 0.08;
+      ballPosRef.current.x = Math.sin(t * 1.5) * 1.5;
+      ballPosRef.current.y = 0.15 + Math.abs(Math.sin(t * 6)) * 0.12;
 
-      if (ballPos.current.z >= GOAL_Z && !goalTriggered.current) {
+      if (ballPosRef.current.z >= GOAL_Z && !goalTriggered.current) {
         goalTriggered.current = true;
         onGoal();
       }
     } else if (phase === 'goal') {
-      ballPos.current.y = 0.3 + Math.abs(Math.sin(t * 8)) * 0.5;
-      ballPos.current.x *= 0.95;
+      ballPosRef.current.y = 0.15 + Math.abs(Math.sin(t * 8)) * 0.4;
+      ballPosRef.current.x *= 0.95;
     } else {
-      ballPos.current.lerp(new THREE.Vector3(BALL_START[0], BALL_START[1], BALL_START[2]), 0.05);
+      ballPosRef.current.lerp(new THREE.Vector3(BALL_START[0], BALL_START[1], BALL_START[2]), 0.05);
     }
 
-    ballRef.current.position.copy(ballPos.current);
+    ballRef.current.position.copy(ballPosRef.current);
     ballRef.current.rotation.x += 0.1;
     ballRef.current.rotation.y += 0.05;
   });
 
   return (
     <mesh ref={ballRef} position={BALL_START} castShadow>
-      <sphereGeometry args={[0.25, 16, 16]} />
+      <sphereGeometry args={[0.18, 16, 16]} />
       <meshStandardMaterial color="#ffffff" roughness={0.4} />
     </mesh>
   );
@@ -112,13 +116,12 @@ function GoalText({ scorerName, rating }: { scorerName: string; rating: number }
         className="flex flex-col items-center select-none"
         style={{ transform: `scale(${scale})`, transition: 'transform 0.1s' }}
       >
-        <div className="text-4xl font-black text-yellow-400 tracking-wider drop-shadow-[0_0_8px_rgba(255,215,0,0.8)]" style={{ textShadow: '2px 2px 0 #000, -1px -1px 0 #000' }}>
+        <div className="text-4xl font-black text-yellow-400 tracking-wider" style={{ textShadow: '2px 2px 0 #000, -1px -1px 0 #000' }}>
           GOOOAL!
         </div>
         <div className="text-lg font-bold text-white mt-1" style={{ textShadow: '1px 1px 0 #000' }}>
           {scorerName} {rating}
         </div>
-        <div className="text-2xl mt-0.5">🎉🎉🎉</div>
       </div>
     </Html>
   );
@@ -129,23 +132,27 @@ function ClickablePlayer({
   selectedId,
   onSelect,
   phase,
-  ballPos,
+  ballPosRef,
   scorerId,
 }: {
   player: Player;
   selectedId: string | null;
   onSelect: (id: string) => void;
   phase: GamePhase;
-  ballPos: React.MutableRefObject<THREE.Vector3>;
+  ballPosRef: React.MutableRefObject<THREE.Vector3>;
   scorerId: string | null;
 }) {
   const pos = FORMATION_433_3D[player.slot];
   const ovr = getOverall(player);
-  const jerseyColor = getJerseyColor(player.position);
   const isSelected = selectedId === player.id;
   const seed = hashId(player.id);
   const lastName = player.name.split(' ').pop() || player.name;
   const isScorer = scorerId === player.id;
+
+  // GK gets a different jersey color (yellow/green)
+  const jerseyColor = player.position === 'GK' ? '#22c55e' : TEAM_JERSEY;
+  const shortsColor = player.position === 'GK' ? '#1a1a1a' : TEAM_SHORTS;
+  const socksColor = player.position === 'GK' ? '#1a1a1a' : TEAM_SOCKS;
 
   let animMode: AnimMode = 'idle';
   let runTarget: [number, number, number] | null = null;
@@ -153,10 +160,10 @@ function ClickablePlayer({
   if (phase === 'playing') {
     if (player.position === 'FWD') {
       animMode = 'running';
-      runTarget = [ballPos.current.x, 0, Math.min(ballPos.current.z + 1, GOAL_Z - 0.5)];
+      runTarget = [ballPosRef.current.x, 0, Math.min(ballPosRef.current.z + 1, GOAL_Z - 0.5)];
     } else if (player.position === 'MID') {
       animMode = 'running';
-      runTarget = [ballPos.current.x * 0.5, 0, Math.min(ballPos.current.z - 2, GOAL_Z - 5)];
+      runTarget = [ballPosRef.current.x * 0.5, 0, Math.min(ballPosRef.current.z - 2, GOAL_Z - 5)];
     } else {
       animMode = 'idle';
     }
@@ -186,8 +193,9 @@ function ClickablePlayer({
         position={[0, 0, 0]}
         rating={ovr}
         jerseyColor={jerseyColor}
+        shortsColor={shortsColor}
+        socksColor={socksColor}
         playerName={lastName}
-        fullName={player.name}
         isSelected={isSelected}
         seed={seed}
         animMode={animMode}
@@ -204,7 +212,7 @@ function ClickablePlayer({
 function PitchSceneInner({ players, selectedId, onSelect }: Props) {
   const [phase, setPhase] = useState<GamePhase>('idle');
   const [scorerId, setScorerId] = useState<string | null>(null);
-  const ballPos = useRef(new THREE.Vector3(BALL_START[0], BALL_START[1], BALL_START[2]));
+  const ballPosRef = useRef(new THREE.Vector3(BALL_START[0], BALL_START[1], BALL_START[2]));
   const goalTimer = useRef<number | null>(null);
   const phaseRef = useRef<GamePhase>('idle');
 
@@ -249,11 +257,11 @@ function PitchSceneInner({ players, selectedId, onSelect }: Props) {
   return (
     <>
       <color attach="background" args={['#0a3a15']} />
-      <fog attach="fog" args={['#0a3a15', 25, 50]} />
+      <fog attach="fog" args={['#0a3a15', 30, 60]} />
 
       <ambientLight intensity={0.5} />
       <directionalLight
-        position={[10, 20, 10]}
+        position={[10, 20, -5]}
         intensity={1.5}
         castShadow
         shadow-mapSize-width={1024}
@@ -263,29 +271,29 @@ function PitchSceneInner({ players, selectedId, onSelect }: Props) {
         shadow-camera-top={15}
         shadow-camera-bottom={-15}
       />
-      <directionalLight position={[-8, 10, -5]} intensity={0.3} color="#88aaff" />
+      <directionalLight position={[-8, 10, 5]} intensity={0.3} color="#88aaff" />
 
       {/* Dark crowd background */}
-      <mesh position={[0, 2, -16]}>
-        <boxGeometry args={[30, 4, 0.5]} />
+      <mesh position={[0, 2.5, -16]}>
+        <boxGeometry args={[30, 5, 0.5]} />
         <meshStandardMaterial color="#0a0e1a" />
       </mesh>
-      <mesh position={[0, 2, 16]}>
-        <boxGeometry args={[30, 4, 0.5]} />
+      <mesh position={[0, 2.5, 16]}>
+        <boxGeometry args={[30, 5, 0.5]} />
         <meshStandardMaterial color="#0a0e1a" />
       </mesh>
-      <mesh position={[-16, 2, 0]}>
-        <boxGeometry args={[0.5, 4, 32]} />
+      <mesh position={[-16, 2.5, 0]}>
+        <boxGeometry args={[0.5, 5, 32]} />
         <meshStandardMaterial color="#0a0e1a" />
       </mesh>
-      <mesh position={[16, 2, 0]}>
-        <boxGeometry args={[0.5, 4, 32]} />
+      <mesh position={[16, 2.5, 0]}>
+        <boxGeometry args={[0.5, 5, 32]} />
         <meshStandardMaterial color="#0a0e1a" />
       </mesh>
 
       <Suspense fallback={null}>
         <Pitch3D />
-        <Ball phase={phase} onGoal={handleGoal} />
+        <Ball phase={phase} onGoal={handleGoal} ballPosRef={ballPosRef} />
         {startingXI.map((p) => (
           <ClickablePlayer
             key={p.id}
@@ -293,7 +301,7 @@ function PitchSceneInner({ players, selectedId, onSelect }: Props) {
             selectedId={selectedId}
             onSelect={onSelect}
             phase={phase}
-            ballPos={ballPos}
+            ballPosRef={ballPosRef}
             scorerId={scorerId}
           />
         ))}
@@ -308,7 +316,7 @@ function PitchSceneInner({ players, selectedId, onSelect }: Props) {
       <CameraRig phase={phase} />
 
       {/* Play Match button overlay inside canvas */}
-      <Html position={[0, 0, 0]} center distanceFactor={10} zIndexRange={[15, 0]} pointerEvents="none">
+      <Html position={[0, 0, -5]} center distanceFactor={12} zIndexRange={[15, 0]} pointerEvents="none">
         <div style={{ pointerEvents: 'auto' }} className="select-none">
           <button
             onClick={startMatch}
@@ -333,7 +341,7 @@ export function PitchScene(props: Props) {
   return (
     <Canvas
       shadows
-      camera={{ position: [0, 9, 6.5], fov: 50 }}
+      camera={{ position: [0, 11, -14], fov: 55 }}
       dpr={[1, 2]}
       gl={{ antialias: true, powerPreference: 'high-performance' }}
     >

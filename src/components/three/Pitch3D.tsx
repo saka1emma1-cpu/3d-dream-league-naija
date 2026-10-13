@@ -9,8 +9,52 @@ function makeLineBox(x: number, z: number, w: number, h: number): JSX.Element {
   return (
     <mesh position={[x, 0.011, z]} rotation={[-Math.PI / 2, 0, 0]}>
       <planeGeometry args={[w, h]} />
-      <meshBasicMaterial color={LINE_COLOR} transparent opacity={0.8} />
+      <meshBasicMaterial color={LINE_COLOR} transparent opacity={0.85} />
     </mesh>
+  );
+}
+
+function GoalNet({ position }: { position: [number, number, number] }) {
+  const netMat = (
+    <meshBasicMaterial color="#ffffff" transparent opacity={0.15} side={THREE.DoubleSide} wireframe />
+  );
+
+  return (
+    <group position={position}>
+      {/* Posts */}
+      <mesh position={[-2.25, 0.6, 0]} castShadow>
+        <boxGeometry args={[0.1, 1.2, 0.1]} />
+        <meshStandardMaterial color="#ffffff" roughness={0.4} />
+      </mesh>
+      <mesh position={[2.25, 0.6, 0]} castShadow>
+        <boxGeometry args={[0.1, 1.2, 0.1]} />
+        <meshStandardMaterial color="#ffffff" roughness={0.4} />
+      </mesh>
+      {/* Crossbar */}
+      <mesh position={[0, 1.2, 0]} castShadow>
+        <boxGeometry args={[4.6, 0.1, 0.1]} />
+        <meshStandardMaterial color="#ffffff" roughness={0.4} />
+      </mesh>
+      {/* Back net */}
+      <mesh position={[0, 0.6, -0.6]}>
+        <planeGeometry args={[4.5, 1.2]} />
+        {netMat}
+      </mesh>
+      {/* Side nets */}
+      <mesh position={[-2.25, 0.6, -0.3]} rotation={[0, Math.PI / 2, 0]}>
+        <planeGeometry args={[0.6, 1.2]} />
+        {netMat}
+      </mesh>
+      <mesh position={[2.25, 0.6, -0.3]} rotation={[0, Math.PI / 2, 0]}>
+        <planeGeometry args={[0.6, 1.2]} />
+        {netMat}
+      </mesh>
+      {/* Top net */}
+      <mesh position={[0, 1.2, -0.3]} rotation={[Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[4.5, 0.6]} />
+        {netMat}
+      </mesh>
+    </group>
   );
 }
 
@@ -52,7 +96,7 @@ export function Pitch3D() {
       {/* Center circle */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.011, 0]}>
         <ringGeometry args={[1.8, 1.8 + LINE_WIDTH, 48]} />
-        <meshBasicMaterial color={LINE_COLOR} transparent opacity={0.8} side={THREE.DoubleSide} />
+        <meshBasicMaterial color={LINE_COLOR} transparent opacity={0.85} side={THREE.DoubleSide} />
       </mesh>
 
       {/* Center spot */}
@@ -61,7 +105,7 @@ export function Pitch3D() {
         <meshBasicMaterial color={LINE_COLOR} transparent opacity={0.7} />
       </mesh>
 
-      {/* Top penalty box (GK side, z = -halfL) */}
+      {/* Top penalty box (GK side) */}
       {makeLineBox(0, -halfL + 4, PITCH_WIDTH - 6, LINE_WIDTH)}
       {makeLineBox(-3, -halfL + 2, LINE_WIDTH, 4)}
       {makeLineBox(3, -halfL + 2, LINE_WIDTH, 4)}
@@ -71,7 +115,7 @@ export function Pitch3D() {
       {makeLineBox(-3, -halfL + 0.75, LINE_WIDTH, 1.5)}
       {makeLineBox(3, -halfL + 0.75, LINE_WIDTH, 1.5)}
 
-      {/* Bottom penalty box (FWD side, z = halfL) */}
+      {/* Bottom penalty box (FWD side) */}
       {makeLineBox(0, halfL - 4, PITCH_WIDTH - 6, LINE_WIDTH)}
       {makeLineBox(-3, halfL - 2, LINE_WIDTH, 4)}
       {makeLineBox(3, halfL - 2, LINE_WIDTH, 4)}
@@ -81,37 +125,9 @@ export function Pitch3D() {
       {makeLineBox(-3, halfL - 0.75, LINE_WIDTH, 1.5)}
       {makeLineBox(3, halfL - 0.75, LINE_WIDTH, 1.5)}
 
-      {/* Goals - top */}
-      <group position={[0, 0, -halfL]}>
-        <mesh position={[0, 1, 0]} castShadow>
-          <boxGeometry args={[4.5, 0.08, 0.08]} />
-          <meshStandardMaterial color="#ffffff" />
-        </mesh>
-        <mesh position={[-2.25, 0.5, 0]} castShadow>
-          <boxGeometry args={[0.08, 1, 0.08]} />
-          <meshStandardMaterial color="#ffffff" />
-        </mesh>
-        <mesh position={[2.25, 0.5, 0]} castShadow>
-          <boxGeometry args={[0.08, 1, 0.08]} />
-          <meshStandardMaterial color="#ffffff" />
-        </mesh>
-      </group>
-
-      {/* Goals - bottom */}
-      <group position={[0, 0, halfL]}>
-        <mesh position={[0, 1, 0]} castShadow>
-          <boxGeometry args={[4.5, 0.08, 0.08]} />
-          <meshStandardMaterial color="#ffffff" />
-        </mesh>
-        <mesh position={[-2.25, 0.5, 0]} castShadow>
-          <boxGeometry args={[0.08, 1, 0.08]} />
-          <meshStandardMaterial color="#ffffff" />
-        </mesh>
-        <mesh position={[2.25, 0.5, 0]} castShadow>
-          <boxGeometry args={[0.08, 1, 0.08]} />
-          <meshStandardMaterial color="#ffffff" />
-        </mesh>
-      </group>
+      {/* Goals with nets */}
+      <GoalNet position={[0, 0, -halfL]} />
+      <GoalNet position={[0, 0, halfL]} />
     </group>
   );
 }
