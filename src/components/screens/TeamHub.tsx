@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useState, lazy, Suspense } from 'react';
 import { Play, ArrowLeftRight, TrendingUp, Home, Users, Edit3, Check } from 'lucide-react';
 import type { GameState, Player, Screen } from '@/types/game';
 import { CurrencyBar } from '@/components/ui/CurrencyBar';
 import { PlayerCardModal } from '@/components/ui/PlayerCardModal';
-import { getOverall, getPosColor, getRatingColor } from '@/components/ui/playerUtils';
+import { getOverall, getPosColor, getJerseyColor, getRatingColor, getRatingGlow, getAvatarUrl } from '@/components/ui/playerUtils';
 import { UPGRADE_COST_PER_POINT } from '@/data/players';
+
+const AvatarImg = lazy(() => import('@/components/ui/AvatarImg'));
 
 interface Props {
   state: GameState;
@@ -48,6 +50,8 @@ function FormationPlayer({
   if (!pos) return null;
   const ovr = getOverall(player);
   const posColor = getPosColor(player.position);
+  const jerseyColor = getJerseyColor(player.position);
+  const lastName = player.name.split(' ').pop() || player.name;
 
   return (
     <button
@@ -56,19 +60,40 @@ function FormationPlayer({
       style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
     >
       <div className="flex flex-col items-center gap-0.5 transition-transform group-hover:scale-110 group-active:scale-95">
-        <div
-          className="w-11 h-11 rounded-full flex items-center justify-center text-sm font-black border-2 shadow-lg"
-          style={{
-            background: `linear-gradient(135deg, ${getRatingColor(ovr)}, ${posColor})`,
-            borderColor: 'rgba(255,255,255,0.3)',
-            color: '#0a0e1a',
-          }}
-        >
-          {ovr}
+        {/* Avatar with rating badge */}
+        <div className="relative">
+          {/* Shadow ellipse under avatar */}
+          <div
+            className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-10 h-2 rounded-full bg-black/40 blur-[3px]"
+          />
+          <div
+            className="w-14 h-14 rounded-full border-[3px] border-white shadow-lg overflow-hidden bg-slate-700"
+          >
+            <Suspense fallback={<div className="w-full h-full bg-slate-600" />}>
+              <AvatarImg src={getAvatarUrl(player.name)} alt={player.name} />
+            </Suspense>
+          </div>
+          {/* Rating badge top-right */}
+          <div
+            className="absolute -top-1.5 -right-1.5 w-7 h-7 rounded-full flex items-center justify-center text-xs font-black border-2 border-white"
+            style={{
+              background: getRatingColor(ovr),
+              color: '#0a0e1a',
+              boxShadow: getRatingGlow(ovr),
+            }}
+          >
+            {ovr}
+          </div>
         </div>
-        <div className="bg-black/70 backdrop-blur-sm rounded-md px-1.5 py-0.5 max-w-[80px]">
-          <p className="text-[9px] font-semibold text-white text-center truncate leading-tight">
-            {player.name.split(' ').pop()}
+
+        {/* Jersey bar with name */}
+        <div
+          className="rounded-md px-1.5 py-0.5 max-w-[72px] flex items-center gap-1"
+          style={{ background: jerseyColor }}
+        >
+          <span className="text-[8px] font-bold text-white/70">{player.position}</span>
+          <p className="text-[8px] font-bold text-white text-center truncate leading-tight">
+            {lastName}
           </p>
         </div>
       </div>
@@ -101,8 +126,12 @@ export function TeamHub({
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 flex flex-col">
+      {/* Header */}
       <div className="px-4 pt-4 pb-2 flex items-center justify-between gap-3">
-        <button onClick={() => setEditingLogo(true)} className="flex items-center gap-2.5 group">
+        <button
+          onClick={() => setEditingLogo(true)}
+          className="flex items-center gap-2.5 group"
+        >
           <div
             className="w-12 h-12 rounded-xl flex items-center justify-center shadow-lg border-2 border-white/20 group-hover:border-white/40 transition"
             style={{ background: `linear-gradient(135deg, ${state.teamLogoColors[0]}, ${state.teamLogoColors[1]})` }}
@@ -117,10 +146,18 @@ export function TeamHub({
         <CurrencyBar coins={state.coins} diamonds={state.diamonds} />
       </div>
 
+      {/* Pitch */}
       <div className="flex-1 px-4 py-2 flex flex-col">
-        <div className="relative flex-1 rounded-2xl overflow-hidden border-2 border-emerald-800/50 shadow-2xl"
-          style={{ background: 'linear-gradient(180deg, #1a6b2e 0%, #0d5c1f 50%, #1a6b2e 100%)' }}
+        <div
+          className="relative flex-1 rounded-2xl overflow-hidden border-2 border-emerald-800/50 shadow-2xl"
+          style={{
+            background: `
+              repeating-linear-gradient(90deg, transparent, transparent 30px, rgba(0,0,0,0.04) 30px, rgba(0,0,0,0.04) 60px),
+              linear-gradient(180deg, #1a6b2e 0%, #0d5c1f 50%, #1a6b2e 100%)
+            `,
+          }}
         >
+          {/* Pitch lines */}
           <div className="absolute inset-0 pointer-events-none">
             <div className="absolute inset-x-3 inset-y-3 border border-white/25 rounded-lg" />
             <div className="absolute left-1/2 top-3 bottom-3 -translate-x-1/2 border-l border-white/25" />
@@ -132,13 +169,15 @@ export function TeamHub({
             <div className="absolute left-1/2 -translate-x-1/2 bottom-3 w-56 h-20 border border-white/20 border-b-0" />
           </div>
 
+          {/* Players */}
           {startingXI.map((p) => (
             <FormationPlayer key={p.id} player={p} onClick={() => setSelectedPlayer(p)} />
           ))}
         </div>
 
-        <p className="text-center text-[10px] text-slate-500 mt-1.5 mb-2">Tap any player to view stats</p>
+        <p className="text-center text-[10px] text-slate-500 mt-1.5 mb-2">Tap any player to view 3D preview & stats</p>
 
+        {/* Bottom menu */}
         <div className="grid grid-cols-4 gap-2 pb-4">
           {menuItems.map(({ screen, label, icon: Icon, color }) => (
             <button
@@ -153,6 +192,7 @@ export function TeamHub({
         </div>
       </div>
 
+      {/* Player card modal */}
       {selectedPlayer && (
         <PlayerCardModal
           player={selectedPlayer}
@@ -163,6 +203,7 @@ export function TeamHub({
         />
       )}
 
+      {/* Logo editor modal */}
       {editingLogo && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setEditingLogo(false)}>
           <div className="bg-slate-800 rounded-2xl border-2 border-slate-600 p-5 w-full max-w-xs" onClick={(e) => e.stopPropagation()}>

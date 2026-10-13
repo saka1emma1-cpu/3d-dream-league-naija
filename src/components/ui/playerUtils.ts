@@ -7,6 +7,13 @@ const POS_COLORS: Record<string, string> = {
   FWD: '#ef4444',
 };
 
+const JERSEY_COLORS: Record<string, string> = {
+  GK: '#fbbf24',
+  DEF: '#60a5fa',
+  MID: '#34d399',
+  FWD: '#f87171',
+};
+
 export function getOverall(p: Player): number {
   const weights: Record<string, number[]> = {
     GK: [0.1, 0.1, 0.3, 0.5],
@@ -22,10 +29,36 @@ export function getPosColor(pos: string): string {
   return POS_COLORS[pos] ?? '#888';
 }
 
+export function getJerseyColor(pos: string): string {
+  return JERSEY_COLORS[pos] ?? '#888';
+}
+
 export function getRatingColor(rating: number): string {
   if (rating >= 85) return '#ffd700';
   if (rating >= 78) return '#a78bfa';
   if (rating >= 70) return '#60a5fa';
   if (rating >= 60) return '#34d399';
   return '#94a3b8';
+}
+
+export function getRatingGlow(rating: number): string {
+  if (rating >= 85) return '0 0 8px 2px rgba(255,215,0,0.6)';
+  if (rating >= 78) return '0 0 8px 2px rgba(167,139,250,0.5)';
+  if (rating >= 70) return '0 0 8px 2px rgba(96,165,250,0.5)';
+  if (rating >= 60) return '0 0 6px 1px rgba(52,211,153,0.4)';
+  return '0 0 4px 1px rgba(148,163,184,0.3)';
+}
+
+export function getAvatarUrl(name: string): string {
+  const seed = encodeURIComponent(name.split(' ').pop() || name);
+  return `https://api.dicebear.com/9.x/adventurer/svg?seed=${seed}&backgroundColor=b6e3f4,c0aede,d1d4f9&skinColor=8d5524,a86e3c,c68642`;
+}
+
+export function getPlayerHeight(seed: number): string {
+  const heights = ["5'9\"", "5'10\"", "5'11\"", "6'0\"", "6'1\"", "6'2\""];
+  return heights[seed % heights.length];
+}
+
+export function getPlayerFoot(seed: number): 'Right' | 'Left' {
+  return seed % 3 === 0 ? 'Left' : 'Right';
 }
