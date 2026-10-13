@@ -112,12 +112,13 @@ function GoalText({ scorerName, rating }: { scorerName: string; rating: number }
         className="flex flex-col items-center select-none"
         style={{ transform: `scale(${scale})`, transition: 'transform 0.1s' }}
       >
-        <div className="text-4xl font-black text-yellow-400 tracking-wider" style={{ textShadow: '2px 2px 0 #000, -1px -1px 0 #000' }}>
+        <div className="text-4xl font-black text-yellow-400 tracking-wider drop-shadow-[0_0_8px_rgba(255,215,0,0.8)]" style={{ textShadow: '2px 2px 0 #000, -1px -1px 0 #000' }}>
           GOOOAL!
         </div>
         <div className="text-lg font-bold text-white mt-1" style={{ textShadow: '1px 1px 0 #000' }}>
           {scorerName} {rating}
         </div>
+        <div className="text-2xl mt-0.5">🎉🎉🎉</div>
       </div>
     </Html>
   );
@@ -317,7 +318,7 @@ function PitchSceneInner({ players, selectedId, onSelect }: Props) {
                 : phase === 'goal'
                 ? 'bg-amber-600 border-amber-400 text-white hover:bg-amber-500'
                 : 'bg-emerald-600 border-emerald-400 text-white hover:bg-emerald-500 animate-pulse'
-            }`
+            }`}
             style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.5)' }}
           >
             {phase === 'playing' ? 'STOP MATCH' : phase === 'goal' ? 'RESET' : 'PLAY MATCH'}
