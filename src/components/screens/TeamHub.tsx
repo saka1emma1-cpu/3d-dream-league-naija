@@ -3,10 +3,10 @@ import { Play, ArrowLeftRight, TrendingUp, Home, Users, Edit3, Check } from 'luc
 import type { GameState, Player, Screen } from '@/types/game';
 import { CurrencyBar } from '@/components/ui/CurrencyBar';
 import { PlayerCardModal } from '@/components/ui/PlayerCardModal';
-import { getOverall, getPosColor, getJerseyColor, getRatingColor, getRatingGlow, getAvatarUrl } from '@/components/ui/playerUtils';
+import { getOverall, getPosColor, getRatingColor, getRatingGlow } from '@/components/ui/playerUtils';
 import { UPGRADE_COST_PER_POINT } from '@/data/players';
 
-const AvatarImg = lazy(() => import('@/components/ui/AvatarImg'));
+const PitchScene = lazy(() => import('@/components/three/PitchScene'));
 
 interface Props {
   state: GameState;
@@ -25,74 +25,59 @@ const LOGO_COLOR_OPTIONS: [string, string][] = [
   ['#000000', '#ffd700'],
 ];
 
-const FORMATION_433: Record<number, { x: number; y: number }> = {
-  0: { x: 50, y: 90 },
-  1: { x: 15, y: 72 },
-  2: { x: 38, y: 75 },
-  3: { x: 62, y: 75 },
-  4: { x: 85, y: 72 },
-  5: { x: 25, y: 48 },
-  6: { x: 50, y: 52 },
-  7: { x: 75, y: 48 },
-  8: { x: 20, y: 20 },
-  9: { x: 50, y: 15 },
-  10: { x: 80, y: 20 },
+const FORMATION_SLOTS: Record<number, { x: number; y: number }> = {
+  0: { x: 50, y: 88 },
+  1: { x: 18, y: 70 },
+  2: { x: 40, y: 73 },
+  3: { x: 60, y: 73 },
+  4: { x: 82, y: 70 },
+  5: { x: 28, y: 45 },
+  6: { x: 50, y: 47 },
+  7: { x: 72, y: 45 },
+  8: { x: 22, y: 18 },
+  9: { x: 50, y: 12 },
+  10: { x: 78, y: 18 },
 };
 
-function FormationPlayer({
+function HudPlayerTag({
   player,
+  isSelected,
   onClick,
 }: {
   player: Player;
+  isSelected: boolean;
   onClick: () => void;
 }) {
-  const pos = FORMATION_433[player.slot];
-  if (!pos) return null;
+  const slot = FORMATION_SLOTS[player.slot];
+  if (!slot) return null;
   const ovr = getOverall(player);
   const posColor = getPosColor(player.position);
-  const jerseyColor = getJerseyColor(player.position);
   const lastName = player.name.split(' ').pop() || player.name;
 
   return (
     <button
       onClick={onClick}
       className="absolute -translate-x-1/2 -translate-y-1/2 group"
-      style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
+      style={{ left: `${slot.x}%`, top: `${slot.y}%` }}
     >
-      <div className="flex flex-col items-center gap-0.5 transition-transform group-hover:scale-110 group-active:scale-95">
-        {/* Avatar with rating badge */}
-        <div className="relative">
-          {/* Shadow ellipse under avatar */}
-          <div
-            className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-10 h-2 rounded-full bg-black/40 blur-[3px]"
-          />
-          <div
-            className="w-14 h-14 rounded-full border-[3px] border-white shadow-lg overflow-hidden bg-slate-700"
-          >
-            <Suspense fallback={<div className="w-full h-full bg-slate-600" />}>
-              <AvatarImg src={getAvatarUrl(player.name)} alt={player.name} />
-            </Suspense>
-          </div>
-          {/* Rating badge top-right */}
-          <div
-            className="absolute -top-1.5 -right-1.5 w-7 h-7 rounded-full flex items-center justify-center text-xs font-black border-2 border-white"
-            style={{
-              background: getRatingColor(ovr),
-              color: '#0a0e1a',
-              boxShadow: getRatingGlow(ovr),
-            }}
-          >
-            {ovr}
-          </div>
-        </div>
-
-        {/* Jersey bar with name */}
+      <div className={`flex flex-col items-center gap-0.5 transition-all ${isSelected ? 'scale-110' : 'group-hover:scale-110 group-active:scale-95'}`}>
+        {/* Rating badge */}
         <div
-          className="rounded-md px-1.5 py-0.5 max-w-[72px] flex items-center gap-1"
-          style={{ background: jerseyColor }}
+          className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white/80"
+          style={{
+            background: getRatingColor(ovr),
+            color: '#0a0e1a',
+            boxShadow: getRatingGlow(ovr),
+          }}
         >
-          <span className="text-[8px] font-bold text-white/70">{player.position}</span>
-          <p className="text-[8px] font-bold text-white text-center truncate leading-tight">
+          {ovr}
+        </div>
+        {/* Name pill */}
+        <div
+          className="rounded px-1 py-0.5 flex items-center gap-0.5"
+          style={{ background: isSelected ? posColor : 'rgba(0,0,0,0.6)' }}
+        >
+          <p className="text-[7px] font-bold text-white truncate leading-tight max-w-[50px]">
             {lastName}
           </p>
         </div>
@@ -108,14 +93,17 @@ export function TeamHub({
   onSetTeamName,
   onSetTeamColors,
 }: Props) {
-  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [editingLogo, setEditingLogo] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(state.teamName);
-
   const startingXI = state.players
     .filter((p) => p.slot >= 0)
     .sort((a, b) => a.slot - b.slot);
+
+  const selectedPlayer = selectedPlayerId
+    ? state.players.find((p) => p.id === selectedPlayerId) ?? null
+    : null;
 
   const menuItems: { screen: Screen; label: string; icon: typeof Play; color: string }[] = [
     { screen: 'match', label: 'PLAY MATCH', icon: Play, color: 'from-emerald-600 to-emerald-700' },
@@ -127,7 +115,7 @@ export function TeamHub({
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 flex flex-col">
       {/* Header */}
-      <div className="px-4 pt-4 pb-2 flex items-center justify-between gap-3">
+      <div className="px-4 pt-4 pb-2 flex items-center justify-between gap-3 z-20 relative">
         <button
           onClick={() => setEditingLogo(true)}
           className="flex items-center gap-2.5 group"
@@ -146,36 +134,49 @@ export function TeamHub({
         <CurrencyBar coins={state.coins} diamonds={state.diamonds} />
       </div>
 
-      {/* Pitch */}
-      <div className="flex-1 px-4 py-2 flex flex-col">
-        <div
-          className="relative flex-1 rounded-2xl overflow-hidden border-2 border-emerald-800/50 shadow-2xl"
-          style={{
-            background: `
-              repeating-linear-gradient(90deg, transparent, transparent 30px, rgba(0,0,0,0.04) 30px, rgba(0,0,0,0.04) 60px),
-              linear-gradient(180deg, #1a6b2e 0%, #0d5c1f 50%, #1a6b2e 100%)
-            `,
-          }}
-        >
-          {/* Pitch lines */}
-          <div className="absolute inset-0 pointer-events-none">
-            <div className="absolute inset-x-3 inset-y-3 border border-white/25 rounded-lg" />
-            <div className="absolute left-1/2 top-3 bottom-3 -translate-x-1/2 border-l border-white/25" />
-            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 border border-white/25 rounded-full" />
-            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 bg-white/30 rounded-full" />
-            <div className="absolute left-1/2 -translate-x-1/2 top-3 w-40 h-10 border border-white/25 border-t-0" />
-            <div className="absolute left-1/2 -translate-x-1/2 bottom-3 w-40 h-10 border border-white/25 border-b-0" />
-            <div className="absolute left-1/2 -translate-x-1/2 top-3 w-56 h-20 border border-white/20 border-t-0" />
-            <div className="absolute left-1/2 -translate-x-1/2 bottom-3 w-56 h-20 border border-white/20 border-b-0" />
+      {/* 3D Pitch + HUD overlay */}
+      <div className="flex-1 px-4 py-2 flex flex-col relative">
+        <div className="relative flex-1 rounded-2xl overflow-hidden border-2 border-emerald-800/50 shadow-2xl bg-[#0d5c1f]">
+          {/* 3D Canvas */}
+          <div className="absolute inset-0">
+            <Suspense fallback={
+              <div className="flex items-center justify-center h-full">
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-10 h-10 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                  <p className="text-xs text-emerald-400 font-semibold">Loading 3D Pitch...</p>
+                </div>
+              </div>
+            }>
+              <PitchScene
+                players={state.players}
+                selectedId={selectedPlayerId}
+                onSelect={(id) => setSelectedPlayerId(id)}
+              />
+            </Suspense>
           </div>
 
-          {/* Players */}
-          {startingXI.map((p) => (
-            <FormationPlayer key={p.id} player={p} onClick={() => setSelectedPlayer(p)} />
-          ))}
+          {/* HUD overlay - player tags */}
+          <div className="absolute inset-0 pointer-events-none">
+            {startingXI.map((p) => (
+              <div key={p.id} className="pointer-events-auto">
+                <HudPlayerTag
+                  player={p}
+                  isSelected={selectedPlayerId === p.id}
+                  onClick={() => setSelectedPlayerId(p.id)}
+                />
+              </div>
+            ))}
+          </div>
+
+          {/* Formation label */}
+          <div className="absolute top-2 left-2 z-10">
+            <div className="bg-black/50 backdrop-blur-sm rounded-lg px-2.5 py-1 border border-white/10">
+              <p className="text-[10px] font-bold text-emerald-400">4-3-3</p>
+            </div>
+          </div>
         </div>
 
-        <p className="text-center text-[10px] text-slate-500 mt-1.5 mb-2">Tap any player to view 3D preview & stats</p>
+        <p className="text-center text-[10px] text-slate-500 mt-1.5 mb-2">Tap any 3D player to view stats</p>
 
         {/* Bottom menu */}
         <div className="grid grid-cols-4 gap-2 pb-4">
@@ -196,7 +197,7 @@ export function TeamHub({
       {selectedPlayer && (
         <PlayerCardModal
           player={selectedPlayer}
-          onClose={() => setSelectedPlayer(null)}
+          onClose={() => setSelectedPlayerId(null)}
           onUpgrade={onUpgradeStat ? (stat) => { onUpgradeStat(selectedPlayer.id, stat); return true; } : undefined}
           coins={state.coins}
           upgradeCost={UPGRADE_COST_PER_POINT}
