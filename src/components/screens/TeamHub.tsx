@@ -1,9 +1,8 @@
 import { useState, lazy, Suspense } from 'react';
-import { Play, ArrowLeftRight, TrendingUp, Home, Users, Edit3, Check } from 'lucide-react';
+import { ArrowLeftRight, TrendingUp, Home, Users, Edit3, Check } from 'lucide-react';
 import type { GameState, Player, Screen } from '@/types/game';
 import { CurrencyBar } from '@/components/ui/CurrencyBar';
 import { PlayerCardModal } from '@/components/ui/PlayerCardModal';
-import { getOverall, getPosColor, getRatingColor, getRatingGlow } from '@/components/ui/playerUtils';
 import { UPGRADE_COST_PER_POINT } from '@/data/players';
 
 const PitchScene = lazy(() => import('@/components/three/PitchScene'));
@@ -25,67 +24,6 @@ const LOGO_COLOR_OPTIONS: [string, string][] = [
   ['#000000', '#ffd700'],
 ];
 
-const FORMATION_SLOTS: Record<number, { x: number; y: number }> = {
-  0: { x: 50, y: 88 },
-  1: { x: 18, y: 70 },
-  2: { x: 40, y: 73 },
-  3: { x: 60, y: 73 },
-  4: { x: 82, y: 70 },
-  5: { x: 28, y: 45 },
-  6: { x: 50, y: 47 },
-  7: { x: 72, y: 45 },
-  8: { x: 22, y: 18 },
-  9: { x: 50, y: 12 },
-  10: { x: 78, y: 18 },
-};
-
-function HudPlayerTag({
-  player,
-  isSelected,
-  onClick,
-}: {
-  player: Player;
-  isSelected: boolean;
-  onClick: () => void;
-}) {
-  const slot = FORMATION_SLOTS[player.slot];
-  if (!slot) return null;
-  const ovr = getOverall(player);
-  const posColor = getPosColor(player.position);
-  const lastName = player.name.split(' ').pop() || player.name;
-
-  return (
-    <button
-      onClick={onClick}
-      className="absolute -translate-x-1/2 -translate-y-1/2 group"
-      style={{ left: `${slot.x}%`, top: `${slot.y}%` }}
-    >
-      <div className={`flex flex-col items-center gap-0.5 transition-all ${isSelected ? 'scale-110' : 'group-hover:scale-110 group-active:scale-95'}`}>
-        {/* Rating badge */}
-        <div
-          className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white/80"
-          style={{
-            background: getRatingColor(ovr),
-            color: '#0a0e1a',
-            boxShadow: getRatingGlow(ovr),
-          }}
-        >
-          {ovr}
-        </div>
-        {/* Name pill */}
-        <div
-          className="rounded px-1 py-0.5 flex items-center gap-0.5"
-          style={{ background: isSelected ? posColor : 'rgba(0,0,0,0.6)' }}
-        >
-          <p className="text-[7px] font-bold text-white truncate leading-tight max-w-[50px]">
-            {lastName}
-          </p>
-        </div>
-      </div>
-    </button>
-  );
-}
-
 export function TeamHub({
   state,
   onUpgradeStat,
@@ -97,19 +35,16 @@ export function TeamHub({
   const [editingLogo, setEditingLogo] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(state.teamName);
-  const startingXI = state.players
-    .filter((p) => p.slot >= 0)
-    .sort((a, b) => a.slot - b.slot);
 
   const selectedPlayer = selectedPlayerId
     ? state.players.find((p) => p.id === selectedPlayerId) ?? null
     : null;
 
-  const menuItems: { screen: Screen; label: string; icon: typeof Play; color: string }[] = [
-    { screen: 'match', label: 'PLAY MATCH', icon: Play, color: 'from-emerald-600 to-emerald-700' },
+  const menuItems: { screen: Screen; label: string; icon: typeof Home; color: string }[] = [
     { screen: 'transfers', label: 'TRANSFERS', icon: ArrowLeftRight, color: 'from-blue-600 to-blue-700' },
     { screen: 'upgrade', label: 'UPGRADE', icon: TrendingUp, color: 'from-amber-600 to-amber-700' },
     { screen: 'stadium', label: 'STADIUM', icon: Home, color: 'from-purple-600 to-purple-700' },
+    { screen: 'p2p', label: 'P2P MATCH', icon: Users, color: 'from-cyan-600 to-cyan-700' },
   ];
 
   return (
@@ -134,10 +69,9 @@ export function TeamHub({
         <CurrencyBar coins={state.coins} diamonds={state.diamonds} />
       </div>
 
-      {/* 3D Pitch + HUD overlay */}
+      {/* 3D Pitch - full scene with players and match */}
       <div className="flex-1 px-4 py-2 flex flex-col relative">
-        <div className="relative flex-1 rounded-2xl overflow-hidden border-2 border-emerald-800/50 shadow-2xl bg-[#0d5c1f]">
-          {/* 3D Canvas */}
+        <div className="relative flex-1 rounded-2xl overflow-hidden border-2 border-emerald-800/50 shadow-2xl bg-[#0a3a15]">
           <div className="absolute inset-0">
             <Suspense fallback={
               <div className="flex items-center justify-center h-full">
@@ -155,19 +89,6 @@ export function TeamHub({
             </Suspense>
           </div>
 
-          {/* HUD overlay - player tags */}
-          <div className="absolute inset-0 pointer-events-none">
-            {startingXI.map((p) => (
-              <div key={p.id} className="pointer-events-auto">
-                <HudPlayerTag
-                  player={p}
-                  isSelected={selectedPlayerId === p.id}
-                  onClick={() => setSelectedPlayerId(p.id)}
-                />
-              </div>
-            ))}
-          </div>
-
           {/* Formation label */}
           <div className="absolute top-2 left-2 z-10">
             <div className="bg-black/50 backdrop-blur-sm rounded-lg px-2.5 py-1 border border-white/10">
@@ -176,7 +97,9 @@ export function TeamHub({
           </div>
         </div>
 
-        <p className="text-center text-[10px] text-slate-500 mt-1.5 mb-2">Tap any 3D player to view stats</p>
+        <p className="text-center text-[10px] text-slate-500 mt-1.5 mb-2">
+          Tap any player for stats — tap PLAY MATCH to simulate
+        </p>
 
         {/* Bottom menu */}
         <div className="grid grid-cols-4 gap-2 pb-4">
