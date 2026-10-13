@@ -6,6 +6,7 @@ import { PlayerCardModal } from '@/components/ui/PlayerCardModal';
 import { UPGRADE_COST_PER_POINT } from '@/data/players';
 
 const PitchScene = lazy(() => import('@/components/three/PitchScene'));
+const MatchEngine = lazy(() => import('@/components/match/MatchEngine'));
 
 interface Props {
   state: GameState;
@@ -35,6 +36,7 @@ export function TeamHub({
   const [editingLogo, setEditingLogo] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(state.teamName);
+  const [showMatch, setShowMatch] = useState(false);
 
   const selectedPlayer = selectedPlayerId
     ? state.players.find((p) => p.id === selectedPlayerId) ?? null
@@ -85,6 +87,7 @@ export function TeamHub({
                 players={state.players}
                 selectedId={selectedPlayerId}
                 onSelect={(id) => setSelectedPlayerId(id)}
+                onPlayMatch={() => setShowMatch(true)}
               />
             </Suspense>
           </div>
@@ -125,6 +128,20 @@ export function TeamHub({
           coins={state.coins}
           upgradeCost={UPGRADE_COST_PER_POINT}
         />
+      )}
+
+      {/* Fullscreen Match Engine */}
+      {showMatch && (
+        <Suspense fallback={
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0a3a15]">
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-10 h-10 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+              <p className="text-xs text-emerald-400 font-semibold">Loading Match...</p>
+            </div>
+          </div>
+        }>
+          <MatchEngine players={state.players} onExit={() => setShowMatch(false)} />
+        </Suspense>
       )}
 
       {/* Logo editor modal */}
