@@ -1,57 +1,246 @@
 import { useRef, useMemo, Suspense, useState, useEffect, useCallback } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { Html } from '@react-three/drei';
+import { Html, Text } from '@react-three/drei';
 import * as THREE from 'three';
 import { ChevronLeft, Pause, Play } from 'lucide-react';
-import { Pitch3D } from '@/components/three/Pitch3D';
-import { Player3DModel, type AnimMode } from '@/components/three/Player3DModel';
 import type { Player } from '@/types/game';
-import { getOverall, getRatingColor, getAvatarUrl, getFaceUrl, getJerseyNumber } from '@/components/ui/playerUtils';
+import { getOverall, getFaceUrl, getJerseyNumber } from '@/components/ui/playerUtils';
 
 interface Props { players: Player[]; onExit: () => void; }
 
+// ===== FL26 FORMATIONS - WIDE PITCH LIKE BROADCAST =====
 const FORMATION_433: Record<number, [number, number, number]> = {
-  0: [0, 0, -10], 1: [-5.5, 0, -6], 2: [-2, 0, -6], 3: [2, 0, -6], 4: [5.5, 0, -6],
-  5: [-3.5, 0, -1], 6: [0, 0, -0.5], 7: [3.5, 0, -1], 8: [-3, 0, 4], 9: [0, 0, 5], 10: [3, 0, 4],
+  0: [0, 0, -18], 1: [-6, 0, -12], 2: [-2, 0, -13], 3: [2, 0, -13], 4: [6, 0, -12],
+  5: [-4, 0, -5], 6: [0, 0, -3], 7: [4, 0, -5], 8: [-5, 0, 2], 9: [0, 0, 4], 10: [5, 0, 2],
 };
 const OPP_FORMATION: [number, number, number][] = [
-  [0, 0, 10], [-5.5, 0, 6], [-2, 0, 6], [2, 0, 6], [5.5, 0, 6],
-  [-3.5, 0, 1], [0, 0, 0.5], [3.5, 0, 1], [-3, 0, -4], [0, 0, -5], [3, 0, -4],
+  [0, 0, 18], [-6, 0, 12], [-2, 0, 13], [2, 0, 13], [6, 0, 12],
+  [-4, 0, 5], [0, 0, 3], [4, 0, 5], [-5, 0, -2], [0, 0, -4], [5, 0, -2],
 ];
-const TEAM_JERSEY='#D00000'; const TEAM_SHORTS='#D00000'; const TEAM_SOCKS='#D00000';
-const OPP_JERSEY='#E8E8E8'; const OPP_SHORTS='#1a1a2e'; const OPP_SOCKS='#E8E8E8';
-const GOAL_Z=11; const OPP_GOAL_Z=-11; const PITCH_HALF_W=10;
+
+const TEAM_JERSEY='#D00000'; const OPP_JERSEY='#FFFFFF';
+const GOAL_Z=21; const OPP_GOAL_Z=-21; const PITCH_W=16; const PITCH_L=22;
 
 function hashId(id:string){ let h=0; for(let i=0;i<id.length;i++) h=((h<<5)-h+id.charCodeAt(i))|0; return Math.abs(h); }
 
+// ===== REALISTIC FL26 PITCH - GRASS STRIPES + STADIUM + LED BOARDS =====
+function RealisticPitch() {
+  const grassTexture = useMemo(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512; canvas.height = 512;
+    const ctx = canvas.getContext('2d')!;
+    for(let i=0;i<32;i++){
+      ctx.fillStyle = i%2===0 ? '#1a8a2e' : '#1e9a34';
+      ctx.fillRect(0, i*16, 512, 16);
+    }
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(4, 4);
+    return tex;
+  }, []);
+
+  const adTexture = useMemo(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1024; canvas.height = 128;
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = '#0a1a8a'; ctx.fillRect(0,0,1024,128);
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 32px Arial';
+    for(let i=0;i<4;i++){
+      ctx.fillText('Football League 26', i*260+20, 70);
+    }
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.repeat.set(2,1);
+    return tex;
+  }, []);
+
+  return (
+    <group>
+      {/* Main HD Grass */}
+      <mesh rotation={[-Math.PI/2,0,0]} receiveShadow>
+        <planeGeometry args={[PITCH_W*2.2, PITCH_L*2.6]} />
+        <meshStandardMaterial map={grassTexture} roughness={0.8} metalness={0.1} />
+      </mesh>
+
+      {/* White Lines - Broadcast Style */}
+      <mesh rotation={[-Math.PI/2,0,0]} position={[0,0.02,0]}>
+        <planeGeometry args={[PITCH_W*2, PITCH_L*2]} />
+        <meshBasicMaterial color="#ffffff" transparent opacity={0} />
+      </mesh>
+      
+      {/* Center line */}
+      <mesh rotation={[-Math.PI/2,0,0]} position={[0,0.03,0]}>
+        <planeGeometry args={[PITCH_W*2, 0.08]} />
+        <meshStandardMaterial color="#ffffff" />
+      </mesh>
+      {/* Center circle */}
+      <mesh rotation={[-Math.PI/2,0,0]} position={[0,0.03,0]}>
+        <ringGeometry args={[3.5, 3.58, 64]} />
+        <meshStandardMaterial color="#ffffff" />
+      </mesh>
+      <mesh rotation={[-Math.PI/2,0,0]} position={[0,0.03,0]}>
+        <circleGeometry args={[0.2, 32]} />
+        <meshStandardMaterial color="#ffffff" />
+      </mesh>
+
+      {/* Penalty areas - FL26 size */}
+      <group position={[0,0.03,GOAL_Z-5.5]}>
+        <mesh position={[0,0,0]}><boxGeometry args={[12,0.05,5.5]} /><meshStandardMaterial color="#ffffff" wireframe={false} /></mesh>
+        <mesh rotation={[-Math.PI/2,0,0]} position={[0,0,2.75]}><planeGeometry args={[12,0.08]} /><meshStandardMaterial color="#ffffff" /></mesh>
+        <mesh rotation={[-Math.PI/2,0,0]} position={[-6,0,0]}><planeGeometry args={[0.08,5.5]} /><meshStandardMaterial color="#ffffff" /></mesh>
+        <mesh rotation={[-Math.PI/2,0,0]} position={[6,0,0]}><planeGeometry args={[0.08,5.5]} /><meshStandardMaterial color="#ffffff" /></mesh>
+      </group>
+      <group position={[0,0.03,OPP_GOAL_Z+5.5]}>
+        <mesh rotation={[-Math.PI/2,0,0]} position={[0,0,-2.75]}><planeGeometry args={[12,0.08]} /><meshStandardMaterial color="#ffffff" /></mesh>
+        <mesh rotation={[-Math.PI/2,0,0]} position={[-6,0,0]}><planeGeometry args={[0.08,5.5]} /><meshStandardMaterial color="#ffffff" /></mesh>
+        <mesh rotation={[-Math.PI/2,0,0]} position={[6,0,0]}><planeGeometry args={[0.08,5.5]} /><meshStandardMaterial color="#ffffff" /></mesh>
+      </group>
+
+      {/* Goals - Real net */}
+      <group position={[0,0.5,GOAL_Z]}>
+        <mesh position={[0,1,0]}><boxGeometry args={[3.6,2,0.1]} /><meshStandardMaterial color="#ffffff" /></mesh>
+        <mesh position={[-1.8,1,0.5]}><boxGeometry args={[0.08,2,1]} /><meshStandardMaterial color="#ffffff" /></mesh>
+        <mesh position={[1.8,1,0.5]}><boxGeometry args={[0.08,2,1]} /><meshStandardMaterial color="#ffffff" /></mesh>
+      </group>
+      <group position={[0,0.5,OPP_GOAL_Z]}>
+        <mesh position={[0,1,0]}><boxGeometry args={[3.6,2,0.1]} /><meshStandardMaterial color="#ffffff" /></mesh>
+        <mesh position={[-1.8,1,-0.5]}><boxGeometry args={[0.08,2,1]} /><meshStandardMaterial color="#ffffff" /></mesh>
+        <mesh position={[1.8,1,-0.5]}><boxGeometry args={[0.08,2,1]} /><meshStandardMaterial color="#ffffff" /></mesh>
+      </group>
+
+      {/* LED Ad Boards - Like FL26 screenshot */}
+      <mesh position={[0,0.8,GOAL_Z+3]}><planeGeometry args={[32,1.5]} /><meshStandardMaterial map={adTexture} emissive="#ffffff" emissiveIntensity={0.2} /></mesh>
+      <mesh position={[0,0.8,OPP_GOAL_Z-3]} rotation={[0,Math.PI,0]}><planeGeometry args={[32,1.5]} /><meshStandardMaterial map={adTexture} emissive="#ffffff" emissiveIntensity={0.2} /></mesh>
+      <mesh position={[-PITCH_W-1,0.8,0]} rotation={[0,Math.PI/2,0]}><planeGeometry args={[44,1.5]} /><meshStandardMaterial map={adTexture} emissive="#ffffff" emissiveIntensity={0.2} /></mesh>
+      <mesh position={[PITCH_W+1,0.8,0]} rotation={[0,-Math.PI/2,0]}><planeGeometry args={[44,1.5]} /><meshStandardMaterial map={adTexture} emissive="#ffffff" emissiveIntensity={0.2} /></mesh>
+
+      {/* Stadium shadow */}
+      <mesh position={[0,12,-28]}><planeGeometry args={[60,20]} /><meshStandardMaterial color="#050a14" /></mesh>
+    </group>
+  );
+}
+// ===== REALISTIC FL26 PLAYER - NOT BLOCKY, SLIM LIKE SCREENSHOT =====
+function RealPlayer({ pos, isTeam, rating, name, isControlled, isBallOwner, ballPos, seed }: {
+  pos: THREE.Vector3; isTeam: boolean; rating: number; name: string; isControlled: boolean; isBallOwner: boolean; ballPos: THREE.Vector3; seed: number
+}) {
+  const groupRef = useRef<THREE.Group>(null);
+  const legL = useRef<THREE.Group>(null);
+  const legR = useRef<THREE.Group>(null);
+  const armL = useRef<THREE.Group>(null);
+  const armR = useRef<THREE.Group>(null);
+
+  useFrame((state) => {
+    if(!groupRef.current) return;
+    const t = state.clock.elapsedTime;
+    const moving = pos.distanceTo(new THREE.Vector3(pos.x,0,pos.z)) > 0.1 || isControlled || isBallOwner;
+
+    if(moving){
+      const runSpeed = isControlled? 8 : 6;
+      if(legL.current) legL.current.rotation.x = Math.sin(t*runSpeed)*0.8;
+      if(legR.current) legR.current.rotation.x = -Math.sin(t*runSpeed)*0.8;
+      if(armL.current) armL.current.rotation.x = -Math.sin(t*runSpeed)*0.6;
+      if(armR.current) armR.current.rotation.x = Math.sin(t*runSpeed)*0.6;
+    }
+    // Face ball
+    if(isBallOwner || isControlled){
+      groupRef.current.lookAt(ballPos.x, 0.5, ballPos.z);
+    }
+  });
+
+  const jerseyColor = isTeam? '#cc0000' : '#ffffff';
+  const shortsColor = isTeam? '#cc0000' : '#1a1a3a';
+  const skinColor = useMemo(() => {
+    const colors = ['#8d5524','#c68642','#e0ac69','#d5a06e','#a86a32'];
+    return colors[seed % colors.length];
+  }, [seed]);
+
+  return (
+    <group position={[pos.x, 0, pos.z]} ref={groupRef}>
+      {/* Shadow */}
+      <mesh rotation={[-Math.PI/2,0,0]} position={[0,0.02,0]}>
+        <circleGeometry args={[0.35, 16]} />
+        <meshBasicMaterial color="#000000" transparent opacity={0.3} />
+      </mesh>
+
+      {/* Controlled indicator - like FL26 green circle */}
+      {isControlled && (
+        <mesh rotation={[-Math.PI/2,0,0]} position={[0,0.04,0]}>
+          <ringGeometry args={[0.5,0.6,32]} />
+          <meshBasicMaterial color="#00ff88" transparent opacity={0.8} side={THREE.DoubleSide} />
+        </mesh>
+      )}
+      {isBallOwner && (
+        <mesh rotation={[-Math.PI/2,0,0]} position={[0,0.04,0]}>
+          <ringGeometry args={[0.35,0.45,24]} />
+          <meshBasicMaterial color={isTeam? "#00ff88" : "#ff4444"} transparent opacity={0.9} side={THREE.DoubleSide} />
+        </mesh>
+      )}
+
+      {/* Body - slim realistic */}
+      <group position={[0,0.9,0]}>
+        {/* Legs */}
+        <group ref={legL} position={[-0.12,0,0]}>
+          <mesh position={[0,-0.35,0]} castShadow><capsuleGeometry args={[0.08,0.35,4,8]} /><meshStandardMaterial color={shortsColor} /></mesh>
+          <mesh position={[0,-0.75,0]} castShadow><capsuleGeometry args={[0.07,0.35,4,8]} /><meshStandardMaterial color={skinColor} /></mesh>
+        </group>
+        <group ref={legR} position={[0.12,0,0]}>
+          <mesh position={[0,-0.35,0]} castShadow><capsuleGeometry args={[0.08,0.35,4,8]} /><meshStandardMaterial color={shortsColor} /></mesh>
+          <mesh position={[0,-0.75,0]} castShadow><capsuleGeometry args={[0.07,0.35,4,8]} /><meshStandardMaterial color={skinColor} /></mesh>
+        </group>
+
+        {/* Torso - jersey */}
+        <mesh position={[0,0.2,0]} castShadow><capsuleGeometry args={[0.22,0.35,4,8]} /><meshStandardMaterial color={jerseyColor} /></mesh>
+
+        {/* Arms */}
+        <group ref={armL} position={[-0.28,0.3,0]}>
+          <mesh position={[0,-0.15,0]} castShadow><capsuleGeometry args={[0.06,0.25,4,8]} /><meshStandardMaterial color={jerseyColor} /></mesh>
+          <mesh position={[0,-0.4,0]} castShadow><capsuleGeometry args={[0.05,0.2,4,8]} /><meshStandardMaterial color={skinColor} /></mesh>
+        </group>
+        <group ref={armR} position={[0.28,0.3,0]}>
+          <mesh position={[0,-0.15,0]} castShadow><capsuleGeometry args={[0.06,0.25,4,8]} /><meshStandardMaterial color={jerseyColor} /></mesh>
+          <mesh position={[0,-0.4,0]} castShadow><capsuleGeometry args={[0.05,0.2,4,8]} /><meshStandardMaterial color={skinColor} /></mesh>
+        </group>
+
+        {/* Head - realistic */}
+        <mesh position={[0,0.65,0]} castShadow><sphereGeometry args={[0.18,16,16]} /><meshStandardMaterial color={skinColor} /></mesh>
+        {/* Hair */}
+        <mesh position={[0,0.78,0]}><sphereGeometry args={[0.19,12,8,0,Math.PI*2,0,Math.PI/2]} /><meshStandardMaterial color="#111111" /></mesh>
+      </group>
+
+      {/* Name label - only for controlled like FL26 */}
+      {isControlled && (
+        <Html position={[0,2,0]} center distanceFactor={8} zIndexRange={[10,0]} pointerEvents="none">
+          <div className="bg-black/70 px-2 py-0.5 rounded text-white text-[10px] font-bold whitespace-nowrap">{name} • {rating}</div>
+        </Html>
+      )}
+    </group>
+  );
+}
+
 interface Entity {
   id:string; name:string; pos:THREE.Vector3; basePos:THREE.Vector3; isTeam:boolean;
-  slot:number; position:string; rating:number; seed:number;
-  jerseyColor:string; shortsColor:string; socksColor:string; faceUrl:string; jerseyNumber:number;
+  slot:number; rating:number; seed:number;
 }
 interface BallState {
   pos:THREE.Vector3; vel:THREE.Vector3; owner:string|null; isShot:boolean;
   shotProgress:number; shotStart:THREE.Vector3; shotEnd:THREE.Vector3;
 }
 
-function GoalText({ scorer, rating, faceUrl }: { scorer:string; rating:number; faceUrl:string }) {
+function GoalCelebration({ scorer, isTeam }: { scorer:string; isTeam:boolean }) {
   const [scale,setScale]=useState(0.5);
-  useFrame((s)=>{ setScale(1+Math.sin(s.clock.elapsedTime*4)*0.15); });
+  useFrame((s)=>{ setScale(1+Math.sin(s.clock.elapsedTime*5)*0.2); });
   return (
-    <Html position={[0,4,0]} center distanceFactor={6} zIndexRange={[20,0]} pointerEvents="none">
-      <div className="flex flex-col items-center select-none" style={{ transform:`scale(${scale})` }}>
-        <div className="text-5xl font-black text-yellow-400 tracking-wider" style={{ textShadow:'3px 3px 0 #000, -1px -1px 0 #000' }}>GOOOAL!</div>
-        <div className="flex items-center gap-2 mt-2 bg-black/70 rounded-xl px-3 py-1.5 border border-white/20">
-          <img src={faceUrl} alt={scorer} className="w-10 h-10 rounded-full object-cover border-2 border-white/70" draggable={false} />
-          <div className="flex flex-col">
-            <span className="text-white text-base font-bold leading-tight" style={{ textShadow:'2px 2px 0 #000' }}>{scorer}</span>
-            <span className="text-yellow-400 text-xs font-black leading-tight">OVR {rating}</span>
-          </div>
+    <Html position={[0,5,0]} center distanceFactor={8} zIndexRange={[30,0]} pointerEvents="none">
+      <div className="flex flex-col items-center" style={{ transform:`scale(${scale})` }}>
+        <div className="text-6xl font-black text-yellow-400 animate-pulse" style={{ textShadow:'4px 4px 0 #000' }}>GOAL!</div>
+        <div className="bg-black/80 px-4 py-1 rounded-full border border-yellow-400 mt-2">
+          <span className="text-white font-bold text-sm">{scorer}</span>
+          <span className="text-yellow-400 ml-2 text-xs">{isTeam? 'EMMA FC' : 'ARG'}</span>
         </div>
       </div>
     </Html>
   );
-  }
+}
 function MatchScene({ players, joystickRef, actionRef, scoreRef, pausedRef, onGoal, controlledInfoRef }: {
   players:Player[]; joystickRef:React.MutableRefObject<{x:number;y:number}>;
   actionRef:React.MutableRefObject<{pass:number;shoot:number;through:number;sprint:number}>;
@@ -61,214 +250,239 @@ function MatchScene({ players, joystickRef, actionRef, scoreRef, pausedRef, onGo
   controlledInfoRef:React.MutableRefObject<{name:string;faceUrl:string;rating:number}>;
 }) {
   const { camera }=useThree();
-  const cameraShake=useRef(0); const sprintTimer=useRef(0);
+  const sprintTimer=useRef(0);
+  const shake=useRef(0);
+
   const entities=useMemo(()=>{
     const team=players.filter(p=>p.slot>=0).sort((a,b)=>a.slot-b.slot);
     const list:Entity[]=[];
     team.forEach(p=>{
       const pos=FORMATION_433[p.slot]?? [0,0,0] as [number,number,number];
-      const seed=hashId(p.id); const ovr=getOverall(p);
-      list.push({ id:p.id, name:p.name.split(' ').pop()||p.name, pos:new THREE.Vector3(pos[0],pos[1],pos[2]), basePos:new THREE.Vector3(pos[0],pos[1],pos[2]), isTeam:true, slot:p.slot, position:p.position, rating:ovr, seed, jerseyColor:p.position==='GK'?'#22c55e':TEAM_JERSEY, shortsColor:p.position==='GK'?'#1a1a1a':TEAM_SHORTS, socksColor:p.position==='GK'?'#1a1a1a':TEAM_SOCKS, faceUrl:getFaceUrl(p.name), jerseyNumber:getJerseyNumber(p.slot) });
+      list.push({ id:p.id, name:p.name.split(' ').pop()||p.name, pos:new THREE.Vector3(pos[0],pos[1],pos[2]), basePos:new THREE.Vector3(pos[0],pos[1],pos[2]), isTeam:true, slot:p.slot, rating:getOverall(p), seed:hashId(p.id) });
     });
     const oppNames=['Martinez','Lopez','Garcia','Silva','Costa','Fernandes','Vega','Pinto','Ramos','Diaz','Santos'];
-    OPP_FORMATION.forEach((pos,i)=>{ const seed=hashId('opp'+i); list.push({ id:'opp'+i, name:oppNames[i], pos:new THREE.Vector3(pos[0],pos[1],pos[2]), basePos:new THREE.Vector3(pos[0],pos[1],pos[2]), isTeam:false, slot:i, position:i===0?'GK':i<5?'DEF':i<8?'MID':'FWD', rating:65+(seed%15), seed, jerseyColor:i===0?'#fbbf24':OPP_JERSEY, shortsColor:OPP_SHORTS, socksColor:OPP_SOCKS, faceUrl:getFaceUrl(oppNames[i]), jerseyNumber:i+1 }); });
+    OPP_FORMATION.forEach((pos,i)=>{ list.push({ id:'opp'+i, name:oppNames[i], pos:new THREE.Vector3(pos[0],pos[1],pos[2]), basePos:new THREE.Vector3(pos[0],pos[1],pos[2]), isTeam:false, slot:i, rating:65+(hashId('opp'+i)%15), seed:hashId('opp'+i) }); });
     return list;
   },[players]);
 
   const ballState=useRef<BallState>({ pos:new THREE.Vector3(0,0.15,0), vel:new THREE.Vector3(0,0,0), owner:null, isShot:false, shotProgress:0, shotStart:new THREE.Vector3(), shotEnd:new THREE.Vector3() });
-  const [goalData,setGoalData]=useState<{scorer:string;rating:number;isTeam:boolean;faceUrl:string}|null>(null);
-  const [controlledId]=useState<string>(players.filter(p=>p.slot>=0).sort((a,b)=>a.slot-b.slot).find(p=>p.position==='FWD')?.id?? '');
+  const [goalData,setGoalData]=useState<{scorer:string;isTeam:boolean}|null>(null);
+  const controlledId=useMemo(()=> players.filter(p=>p.slot>=0).sort((a,b)=>a.slot-b.slot).find(p=>p.position==='FWD')?.id?? entities.find(e=>e.isTeam)?.id?? '', [players, entities]);
   const controlledRef=useRef(controlledId);
   useEffect(()=>{ controlledRef.current=controlledId; },[controlledId]);
 
   useFrame((state,delta)=>{
     if(pausedRef.current) return;
     const t=state.clock.elapsedTime; const ball=ballState.current; const ctrlId=controlledRef.current;
-    const ctrlEntity=entities.find(e=>e.id===ctrlId); const joy=joystickRef.current;
-    if(ctrlEntity){ controlledInfoRef.current={ name:ctrlEntity.name, faceUrl:ctrlEntity.faceUrl, rating:ctrlEntity.rating }; }
-    if(cameraShake.current>0){ camera.position.x+=(Math.random()-0.5)*cameraShake.current; camera.position.y+=(Math.random()-0.5)*cameraShake.current; cameraShake.current*=0.9; if(cameraShake.current<0.01) cameraShake.current=0; }
+    const ctrl=entities.find(e=>e.id===ctrlId); const joy=joystickRef.current;
+    if(ctrl){ controlledInfoRef.current={ name:ctrl.name, faceUrl:getFaceUrl(ctrl.name), rating:ctrl.rating }; }
+    if(shake.current>0){ camera.position.x+=(Math.random()-0.5)*shake.current; camera.position.y+=(Math.random()-0.5)*shake.current; shake.current*=0.92; if(shake.current<0.01) shake.current=0; }
     if(sprintTimer.current>0) sprintTimer.current-=delta;
-    if(ctrlEntity){ const speed=sprintTimer.current>0?0.22:0.11; ctrlEntity.pos.x+=joy.x*speed; ctrlEntity.pos.z+=joy.y*speed; ctrlEntity.pos.x=THREE.MathUtils.clamp(ctrlEntity.pos.x,-PITCH_HALF_W,PITCH_HALF_W); ctrlEntity.pos.z=THREE.MathUtils.clamp(ctrlEntity.pos.z,-GOAL_Z,GOAL_Z); }
+
+    // Movement
+    if(ctrl){ const speed=sprintTimer.current>0?0.25:0.13; ctrl.pos.x+=joy.x*speed; ctrl.pos.z+=joy.y*speed; ctrl.pos.x=THREE.MathUtils.clamp(ctrl.pos.x,-PITCH_W,PITCH_W); ctrl.pos.z=THREE.MathUtils.clamp(ctrl.pos.z,-GOAL_Z,GOAL_Z); }
+
+    // Ball physics
     if(ball.isShot){
-      ball.shotProgress+=delta*1.5; const p=Math.min(ball.shotProgress,1);
+      ball.shotProgress+=delta*1.8; const p=Math.min(ball.shotProgress,1);
       ball.pos.x=THREE.MathUtils.lerp(ball.shotStart.x,ball.shotEnd.x,p);
       ball.pos.z=THREE.MathUtils.lerp(ball.shotStart.z,ball.shotEnd.z,p);
-      ball.pos.y=0.15+Math.sin(p*Math.PI)*2.5;
+      ball.pos.y=0.15+Math.sin(p*Math.PI)*3;
       if(p>=1){ ball.isShot=false; ball.owner=null; ball.vel.set(0,0,0); }
-      const targetGK=entities.find(e=>!e.isTeam&&e.position==='GK');
-      if(targetGK&&Math.random()<0.4&&p>0.3&&p<0.7){ if(Math.abs(ball.pos.x-targetGK.pos.x)<1.5&&Math.abs(ball.pos.z-targetGK.pos.z)<1){ ball.isShot=false; ball.owner=targetGK.id; ball.pos.copy(targetGK.pos); ball.pos.y=0.15; } }
     } else if(ball.owner){
       const owner=entities.find(e=>e.id===ball.owner);
-      if(owner){ ball.pos.x=owner.pos.x; ball.pos.z=owner.pos.z+(owner.isTeam?0.3:-0.3); ball.pos.y=0.15;
-        if(!owner.isTeam){ owner.pos.z-=0.06+(owner.rating-60)*0.002; owner.pos.x+=Math.sin(t*2+owner.seed)*0.05; owner.pos.x=THREE.MathUtils.clamp(owner.pos.x,-PITCH_HALF_W,PITCH_HALF_W); if(owner.pos.z<-7&&Math.random()<0.01){ ball.isShot=true; ball.shotProgress=0; ball.shotStart.copy(ball.pos); ball.shotEnd.set((Math.random()-0.5)*2,0.5,-GOAL_Z); ball.owner=null; } }
+      if(owner){ ball.pos.x=owner.pos.x; ball.pos.z=owner.pos.z+(owner.isTeam?0.4:-0.4); ball.pos.y=0.15;
+        if(!owner.isTeam){ owner.pos.z-=0.08; if(owner.pos.z<-15&&Math.random()<0.015){ ball.isShot=true; ball.shotProgress=0; ball.shotStart.copy(ball.pos); ball.shotEnd.set((Math.random()-0.5)*3,0.5,-GOAL_Z); ball.owner=null; } }
       } else ball.owner=null;
     } else {
-      ball.pos.add(ball.vel); ball.vel.multiplyScalar(0.95); ball.pos.y=0.15;
-      entities.forEach(e=>{ if(ball.owner) return; const d=e.pos.distanceTo(ball.pos); if(d<0.9){ ball.owner=e.id; ball.vel.set(0,0,0); } });
+      ball.pos.add(ball.vel); ball.vel.multiplyScalar(0.94); ball.pos.y=0.15;
+      entities.forEach(e=>{ if(ball.owner) return; if(e.pos.distanceTo(ball.pos)<1){ ball.owner=e.id; ball.vel.set(0,0,0); } });
     }
-    if(ball.pos.z>=GOAL_Z-0.7&&Math.abs(ball.pos.x)<1.5&&ball.pos.y<1.5&&!ball.isShot){
-      scoreRef.current.home++; const scorer=ctrlEntity?.name??'Obi'; const rating=ctrlEntity?.rating??71; cameraShake.current=0.3; const faceUrl=ctrlEntity?.faceUrl??''; setGoalData({ scorer, rating, isTeam:true, faceUrl }); onGoal(scorer,rating,true);
-      ball.pos.set(0,0.15,0); ball.vel.set(0,0,0); ball.owner=null; ball.isShot=false; entities.forEach(e=>e.pos.copy(e.basePos)); setTimeout(()=>setGoalData(null),3500);
+
+    // Goals - Like FL26 92:34 screenshot
+    if(ball.pos.z>=GOAL_Z-1&&Math.abs(ball.pos.x)<1.8&&!ball.isShot){
+      scoreRef.current.home++; shake.current=0.5; const scorer=ctrl?.name??'Okoro'; setGoalData({ scorer, isTeam:true }); onGoal(scorer,ctrl?.rating??70,true);
+      ball.pos.set(0,0.15,0); ball.vel.set(0,0,0); ball.owner=null; ball.isShot=false; entities.forEach(e=>e.pos.copy(e.basePos)); setTimeout(()=>setGoalData(null),3000);
     }
-    if(ball.pos.z<=OPP_GOAL_Z+0.7&&Math.abs(ball.pos.x)<1.5&&ball.pos.y<1.5&&!ball.isShot){
-      scoreRef.current.away++; cameraShake.current=0.3; const oppEntity=entities.find(e=>e.name==='Diaz'); setGoalData({ scorer:'Diaz', rating:68, isTeam:false, faceUrl:oppEntity?.faceUrl??'' }); onGoal('Diaz',68,false);
-      ball.pos.set(0,0.15,0); ball.vel.set(0,0,0); ball.owner=null; ball.isShot=false; entities.forEach(e=>e.pos.copy(e.basePos)); setTimeout(()=>setGoalData(null),3500);
+    if(ball.pos.z<=OPP_GOAL_Z+1&&Math.abs(ball.pos.x)<1.8&&!ball.isShot){
+      scoreRef.current.away++; shake.current=0.5; setGoalData({ scorer:'Diaz', isTeam:false }); onGoal('Diaz',68,false);
+      ball.pos.set(0,0.15,0); ball.vel.set(0,0,0); ball.owner=null; ball.isShot=false; entities.forEach(e=>e.pos.copy(e.basePos)); setTimeout(()=>setGoalData(null),3000);
     }
+
+    // AI
     entities.forEach(e=>{
       if(e.id===ctrlId) return;
-      if(e.isTeam){ if(ball.owner===e.id){ e.pos.z+=0.04; } else { const tx=e.basePos.x+(ball.pos.x-e.basePos.x)*0.15; const tz=e.basePos.z+(ball.pos.z-e.basePos.z)*0.1; e.pos.x+=(tx-e.pos.x)*0.03; e.pos.z+=(tz-e.pos.z)*0.03; } }
-      else { const d=e.pos.distanceTo(ball.pos); if(d<4&&!ball.owner){ const dir=ball.pos.clone().sub(e.pos).normalize(); e.pos.x+=dir.x*0.05; e.pos.z+=dir.z*0.05; } else if(ball.owner&&entities.find(x=>x.id===ball.owner)?.isTeam===false&&ball.owner.startsWith('opp')){ e.pos.z-=0.03; } else { e.pos.x+=(e.basePos.x-e.pos.x)*0.02; e.pos.z+=(e.basePos.z-e.pos.z)*0.02; } }
-      e.pos.x=THREE.MathUtils.clamp(e.pos.x,-PITCH_HALF_W,PITCH_HALF_W); e.pos.z=THREE.MathUtils.clamp(e.pos.z,-GOAL_Z,GOAL_Z);
+      if(e.isTeam){ if(ball.owner!==e.id){ const tx=e.basePos.x+(ball.pos.x-e.basePos.x)*0.2; const tz=e.basePos.z+(ball.pos.z-e.basePos.z)*0.15; e.pos.x+=(tx-e.pos.x)*0.03; e.pos.z+=(tz-e.pos.z)*0.03; } }
+      else { if(!ball.owner&&e.pos.distanceTo(ball.pos)<5){ const dir=ball.pos.clone().sub(e.pos).normalize(); e.pos.x+=dir.x*0.06; e.pos.z+=dir.z*0.06; } else { e.pos.x+=(e.basePos.x-e.pos.x)*0.02; e.pos.z+=(e.basePos.z-e.pos.z)*0.02; } }
+      e.pos.x=THREE.MathUtils.clamp(e.pos.x,-PITCH_W,PITCH_W); e.pos.z=THREE.MathUtils.clamp(e.pos.z,-GOAL_Z,GOAL_Z);
     });
+
     const act=actionRef.current;
-    if(act.pass>0){ act.pass=0; if(ball.owner&&ball.owner===ctrlId){ let nearest=null as Entity|null; let minD=Infinity; entities.forEach(e=>{ if(!e.isTeam||e.id===ctrlId) return; const d=e.pos.distanceTo(ctrlEntity!.pos); if(d<minD){ minD=d; nearest=e; } }); if(nearest&&ctrlEntity){ ball.owner=null; const dir=nearest.pos.clone().sub(ball.pos).normalize(); ball.vel.copy(dir.multiplyScalar(0.3)); } } }
-    if(act.shoot>0){ act.shoot=0; if(ball.owner===ctrlId&&ctrlEntity){ const dist=Math.abs(GOAL_Z-ctrlEntity.pos.z); if(dist<16){ ball.isShot=true; ball.shotProgress=0; ball.shotStart.copy(ball.pos); ball.shotEnd.set((Math.random()-0.5)*2,0.5,GOAL_Z); ball.owner=null; } } }
-    if(act.through>0){ act.through=0; if(ball.owner===ctrlId&&ctrlEntity){ ball.owner=null; ball.vel.set(ctrlEntity.pos.x*0.1,0,0.4); } }
-    if(act.sprint>0){ act.sprint=0; sprintTimer.current=2; }
-    const camX=ball.pos.x*0.3; const camY=11; const camZ=ball.pos.z*0.2-14;
-    camera.position.x+=(camX-camera.position.x)*0.03; camera.position.y+=(camY-camera.position.y)*0.03; camera.position.z+=(camZ-camera.position.z)*0.03;
-    camera.lookAt(ball.pos.x*0.3,0,ball.pos.z*0.3);
+    if(act.pass>0){ act.pass=0; if(ball.owner===ctrlId){ let near:Entity|null=null; let md=Infinity; entities.forEach(e=>{ if(!e.isTeam||e.id===ctrlId) return; const d=e.pos.distanceTo(ctrl!.pos); if(d<md){ md=d; near=e; } }); if(near&&ctrl){ ball.owner=null; const dir=near.pos.clone().sub(ball.pos).normalize(); ball.vel.copy(dir.multiplyScalar(0.35)); } } }
+    if(act.shoot>0){ act.shoot=0; if(ball.owner===ctrlId&&ctrl){ ball.isShot=true; ball.shotProgress=0; ball.shotStart.copy(ball.pos); ball.shotEnd.set((Math.random()-0.5)*2,0.5,GOAL_Z); ball.owner=null; } }
+    if(act.through>0){ act.through=0; if(ball.owner===ctrlId&&ctrl){ ball.owner=null; ball.vel.set(ctrl.pos.x*0.08,0,0.5); } }
+    if(act.sprint>0){ act.sprint=0; sprintTimer.current=2.5; }
+
+    // ===== FL26 BROADCAST CAMERA - Like your 2nd screenshot (POR vs ARG 92:34) =====
+    const targetX = ball.pos.x*0.6;
+    const targetZ = ball.pos.z*0.3;
+    const idealX = targetX;
+    const idealY = 8 + Math.abs(ball.pos.z)*0.15;
+    const idealZ = targetZ - 16;
+    camera.position.x += (idealX - camera.position.x)*0.04;
+    camera.position.y += (idealY - camera.position.y)*0.04;
+    camera.position.z += (idealZ - camera.position.z)*0.04;
+    camera.lookAt(targetX, 0, targetZ+2);
   });
 
   const ball=ballState.current;
   return (
     <>
-      <color attach="background" args={['#0a3a15']} /><fog attach="fog" args={['#0a3a15',30,60]} />
-      <ambientLight intensity={0.5} />
-      <directionalLight position={[10,20,-5]} intensity={1.5} castShadow shadow-mapSize-width={1024} shadow-mapSize-height={1024} shadow-camera-left={-15} shadow-camera-right={15} shadow-camera-top={15} shadow-camera-bottom={-15} />
-      <directionalLight position={[-8,10,5]} intensity={0.3} color="#88aaff" />
-      <mesh position={[0,2.5,-16]}><boxGeometry args={[30,5,0.5]} /><meshStandardMaterial color="#0a0e1a" /></mesh>
-      <mesh position={[0,2.5,16]}><boxGeometry args={[30,5,0.5]} /><meshStandardMaterial color="#0a0e1a" /></mesh>
-      <mesh position={[-16,2.5,0]}><boxGeometry args={[0.5,5,32]} /><meshStandardMaterial color="#0a0e1a" /></mesh>
-      <mesh position={[16,2.5,0]}><boxGeometry args={[0.5,5,32]} /><meshStandardMaterial color="#0a0e1a" /></mesh>
+      <color attach="background" args={['#0b1a3a']} />
+      <fog attach="fog" args={['#0b1a3a', 20, 45]} />
+      <ambientLight intensity={0.7} />
+      <directionalLight position={[15,20,-10]} intensity={2} castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048} shadow-camera-left={-20} shadow-camera-right={20} shadow-camera-top={20} shadow-camera-bottom={-20} />
+      <directionalLight position={[-10,10,10]} intensity={0.5} color="#aaccff" />
+
       <Suspense fallback={null}>
-        <Pitch3D />
-        <mesh position={[ball.pos.x, ball.pos.y, ball.pos.z]} castShadow><sphereGeometry args={[0.18,16,16]} /><meshStandardMaterial color="#ffffff" roughness={0.4} /></mesh>
-        {ball.owner && (<mesh rotation={[-Math.PI/2,0,0]} position={[ball.pos.x,0.02,ball.pos.z]}><ringGeometry args={[0.5,0.65,24]} /><meshBasicMaterial color={ball.owner.startsWith('opp')?'#ff4444':'#22ff22'} transparent opacity={0.6} side={THREE.DoubleSide} /></mesh>)}
-        {ball.owner && (<Html position={[ball.pos.x,1.8,ball.pos.z]} center distanceFactor={6} zIndexRange={[10,0]} pointerEvents="none"><div className="bg-black/60 backdrop-blur-sm rounded px-1.5 py-0.5 text-white text-[10px] font-bold whitespace-nowrap border border-white/15">{entities.find(e=>e.id===ball.owner)?.name}</div></Html>)}
-                {entities.map(e=>{
-          const isControlled=e.id===controlledId; const isScorer=goalData?.isTeam===e.isTeam&&goalData?.scorer===e.name;
-          let animMode:AnimMode='idle'; let runTarget:[number,number,number]|null=null; const moving=e.pos.distanceTo(e.basePos)>0.5||(ball.owner===e.id);
-          if(goalData){ animMode='celebrating'; } else if(moving||isControlled){ animMode='running'; runTarget=[e.pos.x,0,e.pos.z]; }
-          return (<group key={e.id} position={[e.pos.x,e.pos.y,e.pos.z]}><Player3DModel position={[0,0,0]} rating={e.rating} jerseyColor={e.jerseyColor} shortsColor={e.shortsColor} socksColor={e.socksColor} playerName={e.name} isSelected={false} seed={e.seed} animMode={animMode} runTarget={runTarget} isScorer={isScorer} avatarUrl={getAvatarUrl(e.name)} ratingColor={getRatingColor(e.rating)} faceImageUrl={e.faceUrl} jerseyNumber={e.jerseyNumber} showLabel={false} onSelect={()=>{}} />{isControlled&&(<mesh rotation={[-Math.PI/2,0,0]} position={[0,0.02,0]}><ringGeometry args={[0.9,1.05,32]} /><meshBasicMaterial color="#00ff00" transparent opacity={0.7} side={THREE.DoubleSide} /></mesh>)}</group>);
-        })}
-        {goalData&&<GoalText scorer={goalData.scorer} rating={goalData.rating} faceUrl={goalData.faceUrl} />}
+        <RealisticPitch />
+        {/* Ball - HD */}
+        <mesh position={[ball.pos.x, ball.pos.y, ball.pos.z]} castShadow>
+          <sphereGeometry args={[0.16,24,24]} />
+          <meshStandardMaterial color="#ffffff" roughness={0.3} metalness={0.1} />
+          <mesh position={[0,0,0]}><sphereGeometry args={[0.165,12,12]} /><meshBasicMaterial color="#000000" wireframe transparent opacity={0.08} /></mesh>
+        </mesh>
+
+        {entities.map(e=>(
+          <RealPlayer key={e.id} pos={e.pos} isTeam={e.isTeam} rating={e.rating} name={e.name} isControlled={e.id===controlledId} isBallOwner={ball.owner===e.id} ballPos={ball.pos} seed={e.seed} />
+        ))}
+
+        {goalData && <GoalCelebration scorer={goalData.scorer} isTeam={goalData.isTeam} />}
       </Suspense>
     </>
   );
 }
+function MatchEngine({ players, onExit }: Props) {
+  const [score,setScore]=useState({ home:0, away:0 });
+  const [time,setTime]=useState(0);
+  const [paused,setPaused]=useState(false);
+  const [goalDisplay,setGoalDisplay]=useState<{scorer:string;rating:number}|null>(null);
+  const [ctrlDisplay,setCtrlDisplay]=useState<{name:string;faceUrl:string;rating:number}>({ name:'Okoro', faceUrl:getFaceUrl('Okoro'), rating:70 });
 
-export function MatchEngine({ players, onExit }: Props) {
   const joystickRef=useRef({ x:0, y:0 });
   const actionRef=useRef({ pass:0, shoot:0, through:0, sprint:0 });
-  const scoreRef=useRef({ home:0, away:0 });
-  const pausedRef=useRef(false);
-  const controlledInfoRef=useRef({ name:'', faceUrl:'', rating:0 });
+  const scoreRef=useRef(score); const pausedRef=useRef(paused); const controlledInfoRef=useRef(ctrlDisplay);
+  const joyActive=useRef(false); const [joyKnob,setJoyKnob]=useState({ x:0, y:0 });
 
-  const [score,setScore]=useState({ home:0, away:0 });
-  const [paused,setPaused]=useState(false);
-  const [matchTime,setMatchTime]=useState(0);
-  const [ctrlDisplay,setCtrlDisplay]=useState({ name:'', faceUrl:'', rating:0 });
-  const [goalDisplay,setGoalDisplay]=useState<{scorer:string;rating:number;faceUrl:string}|null>(null);
-  const [knobPos,setKnobPos]=useState({ x:0, y:0 });
-  const [joyActive,setJoyActive]=useState(false);
-  const joyCenter=useRef({ x:0, y:0 });
-  const maxRadius=50;
+  useEffect(()=>{ scoreRef.current=score; },[score]);
+  useEffect(()=>{ pausedRef.current=paused; },[paused]);
+  useEffect(()=>{ controlledInfoRef.current=ctrlDisplay; },[ctrlDisplay]);
 
-  const handleJoyStart=useCallback((cx:number,cy:number)=>{ joyCenter.current={ x:cx, y:cy }; setJoyActive(true); },[]);
-  const handleJoyMove=useCallback((cx:number,cy:number)=>{
-    const dx=cx-joyCenter.current.x; const dy=cy-joyCenter.current.y;
-    const dist=Math.sqrt(dx*dx+dy*dy); const clamped=Math.min(dist,maxRadius);
-    const angle=Math.atan2(dy,dx); const x=Math.cos(angle)*clamped; const y=Math.sin(angle)*clamped;
-    setKnobPos({ x, y }); joystickRef.current.x=x/maxRadius; joystickRef.current.y=y/maxRadius;
-  },[]);
-  const handleJoyEnd=useCallback(()=>{ setKnobPos({ x:0, y:0 }); setJoyActive(false); joystickRef.current.x=0; joystickRef.current.y=0; },[]);
+  const handleGoal=useCallback((scorer:string,rating:number)=>{ setGoalDisplay({ scorer, rating }); setTimeout(()=>setGoalDisplay(null),3000); },[]);
 
   useEffect(()=>{
-    const id=setInterval(()=>{ if(!pausedRef.current){ setMatchTime(t=>Math.min(t+1,5400)); } },100);
-    return ()=>clearInterval(id);
+    const iv=setInterval(()=>{
+      if(!pausedRef.current){
+        setTime(t=>{
+          if(t>=540){ pausedRef.current=true; setPaused(true); return t; }
+          const nt=t+1; if(nt%15===0){ const cur=controlledInfoRef.current; setCtrlDisplay(cur); } return nt;
+        });
+      }
+    },1000);
+    return ()=>clearInterval(iv);
   },[]);
 
   useEffect(()=>{
-    const id=setInterval(()=>{ setScore({...scoreRef.current }); setCtrlDisplay({...controlledInfoRef.current }); },200);
+    const cur=controlledInfoRef.current; if(cur.name) setCtrlDisplay(cur);
+    const id=setInterval(()=>{ setScore({...scoreRef.current}); setCtrlDisplay({...controlledInfoRef.current}); },200);
     return ()=>clearInterval(id);
   },[]);
 
-  const handleGoal=useCallback((scorer:string, rating:number, _isTeam:boolean)=>{
-    const face=controlledInfoRef.current.name===scorer? controlledInfoRef.current.faceUrl : controlledInfoRef.current.faceUrl;
-    setGoalDisplay({ scorer, rating, faceUrl:face });
-    setTimeout(()=>setGoalDisplay(null),3500);
-  },[]);
+  const fmt=(s:number)=>`${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
 
-  const formatTime=(s:number)=>{ const m=Math.floor(s/60); const sec=Math.floor(s%60); return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`; };
-
-  const doAction=(action:'pass'|'shoot'|'through'|'sprint')=>{
-    if(action==='pass') actionRef.current.pass=1;
-    if(action==='shoot') actionRef.current.shoot=1;
-    if(action==='through') actionRef.current.through=1;
-    if(action==='sprint') actionRef.current.sprint=1;
+  const handleJoyStart=(cx:number,cy:number)=>{ joyActive.current=true; };
+  const handleJoyMove=(cx:number,cy:number)=>{
+    if(!joyActive.current) return;
+    const base=document.querySelector('.joy-base')?.getBoundingClientRect();
+    if(!base) return;
+    const dx=cx-(base.left+base.width/2); const dy=cy-(base.top+base.height/2);
+    const dist=Math.min(Math.sqrt(dx*dx+dy*dy), 55); const ang=Math.atan2(dy,dx);
+    const x=Math.cos(ang)*dist; const y=Math.sin(ang)*dist;
+    setJoyKnob({ x, y }); joystickRef.current={ x: x/55, y: y/55 };
   };
+  const handleJoyEnd=()=>{ joyActive.current=false; setJoyKnob({ x:0, y:0 }); joystickRef.current={ x:0, y:0 }; };
+  const doAction=(type:'pass'|'shoot'|'through'|'sprint')=>{ if(type==='pass') actionRef.current.pass++; if(type==='shoot') actionRef.current.shoot++; if(type==='through') actionRef.current.through++; if(type==='sprint') actionRef.current.sprint++; };
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#0a3a15] flex flex-col select-none touch-none">
-      <div className="absolute top-0 left-0 right-0 z-30 bg-black/70 backdrop-blur-sm">
-        <div className="flex items-center justify-between px-3 py-2">
+    <div className="w-full h-screen relative overflow-hidden bg-[#0b1a3a] select-none">
+      {/* FL26 TOP BAR - EXACTLY LIKE YOUR SCREENSHOT POR 1-1 ARG 92:34 */}
+      <div className="absolute top-0 left-0 right-0 z-30 h-11 bg-black/80 backdrop-blur-md border-b border-white/10 flex items-center justify-between px-3">
+        <div className="flex items-center gap-2">
+          <button onClick={onExit} className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20"><ChevronLeft size={18} /></button>
           <div className="flex items-center gap-2">
-            <button onClick={onExit} className="text-white/80 hover:text-white p-1"><ChevronLeft className="w-5 h-5" /></button>
-            <div className="flex items-center gap-1.5 text-white font-bold text-sm">
-              <span className="text-red-400">EMMA FC</span><span className="text-lg">{score.home}</span><span className="text-white/40 text-xs">|</span><span className="text-lg">{score.away}</span><span className="text-white/70">ARG</span>
-            </div>
+            <img src={ctrlDisplay.faceUrl} alt={ctrlDisplay.name} className="w-7 h-7 rounded-full object-cover border border-white/30" />
+            <span className="text-white font-bold text-sm tracking-wide">{ctrlDisplay.name}</span>
+            <span className="text-emerald-400 text-[10px] font-black ml-1">{ctrlDisplay.rating}</span>
           </div>
-          <div className="flex flex-col items-center">
-            <div className="text-red-500 font-black text-sm tabular-nums">{formatTime(matchTime)}{matchTime>5400&&<span className="text-red-400 text-xs ml-1">+5</span>}</div>
-            <div className="text-[7px] text-white/40 font-semibold tracking-wider">FOOTBALL LEAGUE 26</div>
-          </div>
-          <button onClick={()=>{ setPaused(!paused); pausedRef.current=!paused; }} className="text-white/80 hover:text-white p-1">{paused?<Play className="w-5 h-5"/>:<Pause className="w-5 h-5"/>}</button>
         </div>
-        <div className="overflow-hidden h-3 bg-black/50"><div className="whitespace-nowrap text-[8px] text-white/30 font-semibold">FOOTBALL LEAGUE 26 • EMMA FC vs ARGENTINA • LIVE FROM LAGOS •</div></div>
+
+        <div className="flex items-center gap-2">
+          <div className="flex items-center bg-[#111] rounded px-3 py-1 gap-3 border border-white/10">
+            <span className="text-white font-black text-sm">EMMA FC</span>
+            <div className="flex items-center gap-1 bg-white text-black font-black px-2 py-0.5 rounded text-sm">
+              <span>{score.home}</span><span className="opacity-50">-</span><span>{score.away}</span>
+            </div>
+            <span className="text-white font-black text-sm">ARG</span>
+          </div>
+          <div className="flex items-center gap-1 bg-[#00ff88] text-black font-black px-2 py-1 rounded text-xs">
+            <span>{fmt(time)}</span><span className="text-[9px]">+{Math.floor(Math.random()*3)+2}</span>
+          </div>
+          <button onClick={()=>{ setPaused(!paused); pausedRef.current=!paused; }} className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white">
+            {paused? <Play size={14} /> : <Pause size={14} />}
+          </button>
+        </div>
       </div>
-            <div className="flex-1 relative">
-        <Canvas shadows camera={{ position:[0,11,-14], fov:55 }} dpr={[1,2]} gl={{ antialias:true, powerPreference:'high-performance' }}>
+
+      <div className="flex-1 relative pt-11" style={{ height:'100vh' }}>
+        <Canvas shadows camera={{ position:[0,12,-18], fov:42 }} dpr={[1,2]} gl={{ antialias:true, powerPreference:'high-performance' }}>
           <MatchScene players={players} joystickRef={joystickRef} actionRef={actionRef} scoreRef={scoreRef} pausedRef={pausedRef} onGoal={handleGoal} controlledInfoRef={controlledInfoRef} />
         </Canvas>
       </div>
 
-      {ctrlDisplay.name&&(
-        <div className="absolute top-14 left-3 z-30 flex items-center gap-2 bg-black/60 backdrop-blur-sm rounded-lg pl-1 pr-3 py-1 border border-white/15">
-          <img src={ctrlDisplay.faceUrl} alt={ctrlDisplay.name} className="w-9 h-9 rounded-full object-cover border border-white/30" draggable={false} />
-          <div className="flex flex-col"><span className="text-white text-xs font-bold leading-tight">{ctrlDisplay.name}</span><span className="text-emerald-400 text-[9px] font-semibold leading-tight">OVR {ctrlDisplay.rating}</span></div>
-        </div>
-      )}
-
       {goalDisplay&&(
-        <div className="absolute bottom-32 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 bg-black/80 backdrop-blur-md rounded-2xl px-4 py-2.5 border-2 border-yellow-400/50 animate-pulse">
-          <img src={goalDisplay.faceUrl||ctrlDisplay.faceUrl} alt={goalDisplay.scorer} className="w-14 h-14 rounded-full object-cover border-2 border-yellow-400/80" draggable={false} />
-          <div className="flex flex-col"><span className="text-yellow-400 text-lg font-black leading-tight" style={{ textShadow:'2px 2px 0 #000' }}>GOOOAL!</span><span className="text-white text-sm font-bold leading-tight">{goalDisplay.scorer}</span><span className="text-yellow-400 text-xs font-black leading-tight">OVR {goalDisplay.rating}</span></div>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-40 flex flex-col items-center">
+          <div className="text-7xl font-black text-yellow-400 animate-pulse" style={{ textShadow:'4px 4px 0 #000, -2px -2px 0 #000' }}>GOAL!</div>
+          <div className="mt-3 flex items-center gap-3 bg-black/90 backdrop-blur-md rounded-2xl px-5 py-3 border-2 border-yellow-400/60">
+            <img src={getFaceUrl(goalDisplay.scorer)} alt={goalDisplay.scorer} className="w-14 h-14 rounded-full object-cover border-2 border-yellow-400" />
+            <div><div className="text-white font-black text-lg leading-none">{goalDisplay.scorer}</div><div className="text-yellow-400 font-black text-xs mt-1">OVR {goalDisplay.rating}</div></div>
+          </div>
         </div>
       )}
 
-      <div className="absolute bottom-6 left-6 z-30" onTouchStart={(e)=>{ e.preventDefault(); const t=e.changedTouches[0]; handleJoyStart(t.clientX,t.clientY); }} onTouchMove={(e)=>{ if(joyActive){ e.preventDefault(); const t=e.touches[0]; handleJoyMove(t.clientX,t.clientY); } }} onTouchEnd={handleJoyEnd} onMouseDown={(e)=>handleJoyStart(e.clientX,e.clientY)} onMouseMove={(e)=>{ if(joyActive) handleJoyMove(e.clientX,e.clientY); }} onMouseUp={handleJoyEnd}>
-        <div className="relative w-[130px] h-[130px] rounded-full bg-black/40 border-2 border-white/20 touch-none">
-          <div className="absolute inset-2 rounded-full border border-white/5" />
-          <div className="absolute top-1/2 left-1/2 w-[56px] h-[56px] -mt-7 -ml-7 rounded-full bg-white/80 border-2 border-white/50 shadow-lg" style={{ transform:`translate(${knobPos.x}px, ${knobPos.y}px) scale(${joyActive?1.1:1})`, transition:joyActive?'none':'transform 0.15s' }} />
+      {/* FL26 JOYSTICK - Large */}
+      <div className="absolute bottom-8 left-6 z-30 joy-base" onTouchStart={(e)=>{ e.preventDefault(); handleJoyStart(e.changedTouches[0].clientX,e.changedTouches[0].clientY); }} onTouchMove={(e)=>{ e.preventDefault(); handleJoyMove(e.touches[0].clientX,e.touches[0].clientY); }} onTouchEnd={handleJoyEnd} onMouseDown={(e)=>handleJoyStart(e.clientX,e.clientY)} onMouseMove={(e)=>{ if(joyActive.current) handleJoyMove(e.clientX,e.clientY); }} onMouseUp={handleJoyEnd} onMouseLeave={handleJoyEnd}>
+        <div className="relative w-[150px] h-[150px] rounded-full bg-black/30 border-2 border-white/10 backdrop-blur-sm touch-none flex items-center justify-center">
+          <div className="absolute inset-3 rounded-full border border-white/5" />
+          <div className="w-[64px] h-[64px] rounded-full bg-white/90 shadow-xl border border-white" style={{ transform:`translate(${joyKnob.x}px, ${joyKnob.y}px) scale(${joyActive.current?1.15:1})`, transition:joyActive.current?'none':'transform 0.15s' }} />
         </div>
       </div>
 
-      <div className="absolute bottom-6 right-6 z-30 flex flex-col items-center gap-2">
-        <button onTouchStart={()=>doAction('shoot')} onMouseDown={()=>doAction('shoot')} className="w-[90px] h-[90px] rounded-full bg-black/45 border-4 border-yellow-400/60 text-white font-bold text-xs flex items-center justify-center active:scale-90 hover:bg-black/60 transition shadow-lg">SHOOT</button>
-        <button onTouchStart={()=>doAction('through')} onMouseDown={()=>doAction('through')} className="w-[78px] h-[78px] rounded-full bg-black/45 border-2 border-white/30 text-white font-bold text-[11px] flex items-center justify-center active:scale-90 hover:bg-black/60 transition">THROUGH</button>
-        <div className="flex gap-2">
-          <button onTouchStart={()=>doAction('pass')} onMouseDown={()=>doAction('pass')} className="w-[70px] h-[70px] rounded-full bg-black/45 border-2 border-white/30 text-white font-bold text-[11px] flex items-center justify-center active:scale-90 hover:bg-black/60 transition">PASS</button>
-          <button onTouchStart={()=>doAction('sprint')} onMouseDown={()=>doAction('sprint')} className="w-[78px] h-[78px] rounded-full bg-black/45 border-2 border-white/30 text-white font-bold text-[10px] flex flex-col items-center justify-center active:scale-90 hover:bg-black/60 transition leading-tight">SPRINT<br/><span className="text-[8px] text-white/50">SKILLS</span></button>
+      {/* FL26 BUTTONS - Like screenshot */}
+      <div className="absolute bottom-8 right-6 z-30 flex flex-col items-center gap-3">
+        <button onTouchStart={(e)=>{ e.preventDefault(); doAction('shoot'); }} onMouseDown={()=>doAction('shoot')} className="w-[96px] h-[96px] rounded-full bg-gradient-to-b from-yellow-400 to-orange-500 border-4 border-white/20 text-black font-black text-sm flex flex-col items-center justify-center active:scale-90 shadow-xl">SHOOT</button>
+        <div className="flex gap-3">
+          <button onTouchStart={(e)=>{ e.preventDefault(); doAction('through'); }} onMouseDown={()=>doAction('through')} className="w-[82px] h-[82px] rounded-full bg-white/10 backdrop-blur-md border-2 border-white/30 text-white font-bold text-[11px] flex flex-col items-center justify-center active:scale-90">THROUGH</button>
+          <button onTouchStart={(e)=>{ e.preventDefault(); doAction('sprint'); }} onMouseDown={()=>doAction('sprint')} className="w-[82px] h-[82px] rounded-full bg-white/10 backdrop-blur-md border-2 border-white/30 text-white font-bold text-[10px] flex flex-col items-center justify-center active:scale-90 leading-tight">SPRINT<br/><span className="text-[8px] opacity-60">SKILLS</span></button>
         </div>
+        <button onTouchStart={(e)=>{ e.preventDefault(); doAction('pass'); }} onMouseDown={()=>doAction('pass')} className="w-[82px] h-[82px] rounded-full bg-white/10 backdrop-blur-md border-2 border-white/30 text-white font-bold text-[11px] flex items-center justify-center active:scale-90">PASS</button>
       </div>
 
       {paused&&(
-        <div className="absolute inset-0 z-40 bg-black/60 backdrop-blur-sm flex items-center justify-center">
+        <div className="absolute inset-0 z-40 bg-black/70 backdrop-blur-sm flex items-center justify-center">
           <div className="flex flex-col items-center gap-4">
-            <div className="text-white text-2xl font-black">PAUSED</div>
-            <div className="text-white/60 text-sm">{score.home} - {score.away}</div>
-            <button onClick={()=>{ setPaused(false); pausedRef.current=false; }} className="px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-500 transition">RESUME</button>
+            <div className="text-white text-3xl font-black">PAUSED</div>
+            <div className="flex items-center gap-3 bg-white/10 px-4 py-2 rounded-full"><span className="text-white font-bold">EMMA FC {score.home} - {score.away} ARG</span><span className="text-emerald-400 font-bold text-sm">{fmt(time)}</span></div>
+            <button onClick={()=>{ setPaused(false); pausedRef.current=false; }} className="px-8 py-3 bg-[#00ff88] text-black rounded-xl font-black hover:bg-emerald-400 transition">RESUME</button>
             <button onClick={onExit} className="px-6 py-2 bg-white/10 text-white/80 rounded-xl font-semibold hover:bg-white/20 transition text-sm">QUIT MATCH</button>
           </div>
         </div>
