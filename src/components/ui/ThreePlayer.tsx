@@ -1,133 +1,91 @@
-import { useRef } from 'react';
-import { useFrame } from '@react-three/fiber';
-import { Text } from '@react-three/drei';
 import * as THREE from 'three';
+import { useMemo, useRef } from 'react';
+import { useFrame } from '@react-three/fiber';
 
-interface Props {
-  jerseyColor: string;
-  number: number;
-}
-
-export function ThreePlayer({ jerseyColor, number }: Props) {
+export function ThreePlayer({ pos, isTeam, isControlled, isBallOwner, faceUrl, name, rating }: {
+  pos: THREE.Vector3;
+  isTeam: boolean;
+  isControlled: boolean;
+  isBallOwner: boolean;
+  faceUrl: string;
+  name: string;
+  rating: number;
+  seed?: number;
+  ballPos?: THREE.Vector3;
+  slot?: number;
+}) {
   const groupRef = useRef<THREE.Group>(null);
 
-  useFrame(() => {
-    if (groupRef.current) {
-      groupRef.current.rotation.y += 0.01;
+  // REAL FACE TEXTURE - NO UPLOAD NEEDED
+  const faceTexture = useMemo(() => {
+    const loader = new THREE.TextureLoader();
+    loader.setCrossOrigin('anonymous');
+    const tex = loader.load(faceUrl);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }, [faceUrl]);
+
+  useFrame((state) => {
+    if (groupRef.current && isControlled) {
+      groupRef.current.position.y = Math.sin(state.clock.elapsedTime * 3) * 0.05;
     }
   });
 
-  const skinColor: THREE.ColorRepresentation = '#8D5524';
-  const hairColor: THREE.ColorRepresentation = '#1a0e04';
-  const shortsColor: THREE.ColorRepresentation = '#1a1a2e';
-  const bootColor: THREE.ColorRepresentation = '#1a1a1a';
-
   return (
-    <group ref={groupRef} position={[0, -0.8, 0]}>
-      {/* Head */}
-      <mesh position={[0, 1.85, 0]} castShadow>
-        <sphereGeometry args={[0.35, 24, 24]} />
-        <meshStandardMaterial color={skinColor} roughness={0.5} />
+    <group ref={groupRef} position={[pos.x, 0, pos.z]}>
+      {/* SHADOW */}
+      <mesh position={[0, 0.01, 0]} rotation={[-Math.PI/2, 0, 0]}>
+        <circleGeometry args={[0.35, 16]} />
+        <meshBasicMaterial color="#000" transparent opacity={0.3} />
       </mesh>
 
-      {/* Hair (low-cut) */}
-      <mesh position={[0, 2.02, -0.02]} castShadow>
-        <sphereGeometry args={[0.36, 16, 16, 0, Math.PI * 2, 0, Math.PI * 0.4]} />
-        <meshStandardMaterial color={hairColor} roughness={0.9} />
+      {/* LEGS */}
+      <mesh position={[-0.12, 0.35, 0]} castShadow>
+        <capsuleGeometry args={[0.08, 0.5, 4, 8]} />
+        <meshStandardMaterial color={isTeam? "#ffffff" : "#1e293b"} />
+      </mesh>
+      <mesh position={[0.12, 0.35, 0]} castShadow>
+        <capsuleGeometry args={[0.08, 0.5, 4, 8]} />
+        <meshStandardMaterial color={isTeam? "#ffffff" : "#1e293b"} />
       </mesh>
 
-      {/* Neck */}
-      <mesh position={[0, 1.55, 0]}>
-        <cylinderGeometry args={[0.14, 0.16, 0.2, 12]} />
-        <meshStandardMaterial color={skinColor} roughness={0.5} />
+      {/* BODY - JERSEY */}
+      <mesh position={[0, 0.9, 0]} castShadow>
+        <capsuleGeometry args={[0.22, 0.5, 4, 12]} />
+        <meshStandardMaterial color={isTeam? "#dc2626" : "#ffffff"} roughness={0.6} />
       </mesh>
 
-      {/* Torso (jersey) */}
-      <mesh position={[0, 1.05, 0]} castShadow>
-        <capsuleGeometry args={[0.32, 0.5, 8, 16]} />
-        <meshStandardMaterial color={jerseyColor} roughness={0.55} />
+      {/* ARMS */}
+      <mesh position={[-0.32, 0.9, 0]} rotation={[0, 0, -0.2]} castShadow>
+        <capsuleGeometry args={[0.06, 0.4, 4, 8]} />
+        <meshStandardMaterial color="#d4a574" />
+      </mesh>
+      <mesh position={[0.32, 0.9, 0]} rotation={[0, 0, 0.2]} castShadow>
+        <capsuleGeometry args={[0.06, 0.4, 4, 8]} />
+        <meshStandardMaterial color="#d4a574" />
       </mesh>
 
-      {/* Number on jersey */}
-      <Text
-        position={[0, 1.05, 0.33]}
-        fontSize={0.22}
-        color="#ffffff"
-        anchorX="center"
-        anchorY="middle"
-      >
-        {String(number)}
-      </Text>
-
-      {/* Hips/shorts */}
-      <mesh position={[0, 0.58, 0]} castShadow>
-        <capsuleGeometry args={[0.28, 0.2, 8, 16]} />
-        <meshStandardMaterial color={shortsColor} roughness={0.6} />
+      {/* HEAD WITH REAL FACE TEXTURE */}
+      <mesh position={[0, 1.45, 0]} castShadow>
+        <sphereGeometry args={[0.22, 24, 24]} />
+        <meshStandardMaterial map={faceTexture} roughness={0.5} metalness={0.1} />
       </mesh>
 
-      {/* Left arm */}
-      <group position={[-0.42, 1.25, 0]} rotation={[0, 0, 0.15]}>
-        <mesh position={[0, -0.25, 0]} castShadow>
-          <capsuleGeometry args={[0.1, 0.3, 6, 12]} />
-          <meshStandardMaterial color={jerseyColor} roughness={0.55} />
+      {/* BALL OWNER RING */}
+      {isBallOwner && (
+        <mesh position={[0, 0.05, 0]} rotation={[-Math.PI/2, 0, 0]}>
+          <ringGeometry args={[0.4, 0.5, 16]} />
+          <meshBasicMaterial color="#22c55e" transparent opacity={0.8} />
         </mesh>
-        {/* Forearm */}
-        <mesh position={[0, -0.55, 0]} castShadow>
-          <capsuleGeometry args={[0.09, 0.25, 6, 12]} />
-          <meshStandardMaterial color={skinColor} roughness={0.5} />
-        </mesh>
-      </group>
+      )}
 
-      {/* Right arm */}
-      <group position={[0.42, 1.25, 0]} rotation={[0, 0, -0.15]}>
-        <mesh position={[0, -0.25, 0]} castShadow>
-          <capsuleGeometry args={[0.1, 0.3, 6, 12]} />
-          <meshStandardMaterial color={jerseyColor} roughness={0.55} />
+      {/* CONTROLLED ARROW */}
+      {isControlled && (
+        <mesh position={[0, 2.1, 0]} rotation={[0, 0, 0]}>
+          <coneGeometry args={[0.15, 0.3, 8]} />
+          <meshBasicMaterial color="#facc15" />
         </mesh>
-        {/* Forearm */}
-        <mesh position={[0, -0.55, 0]} castShadow>
-          <capsuleGeometry args={[0.09, 0.25, 6, 12]} />
-          <meshStandardMaterial color={skinColor} roughness={0.5} />
-        </mesh>
-      </group>
-
-      {/* Left leg */}
-      <group position={[-0.16, 0.38, 0]}>
-        <mesh position={[0, -0.25, 0]} castShadow>
-          <capsuleGeometry args={[0.13, 0.3, 6, 12]} />
-          <meshStandardMaterial color={shortsColor} roughness={0.6} />
-        </mesh>
-        {/* Shin */}
-        <mesh position={[0, -0.6, 0]} castShadow>
-          <capsuleGeometry args={[0.11, 0.3, 6, 12]} />
-          <meshStandardMaterial color={skinColor} roughness={0.5} />
-        </mesh>
-        {/* Boot */}
-        <mesh position={[0, -0.85, 0.06]} castShadow>
-          <boxGeometry args={[0.2, 0.12, 0.35]} />
-          <meshStandardMaterial color={bootColor} roughness={0.3} metalness={0.1} />
-        </mesh>
-      </group>
-
-      {/* Right leg */}
-      <group position={[0.16, 0.38, 0]}>
-        <mesh position={[0, -0.25, 0]} castShadow>
-          <capsuleGeometry args={[0.13, 0.3, 6, 12]} />
-          <meshStandardMaterial color={shortsColor} roughness={0.6} />
-        </mesh>
-        {/* Shin */}
-        <mesh position={[0, -0.6, 0]} castShadow>
-          <capsuleGeometry args={[0.11, 0.3, 6, 12]} />
-          <meshStandardMaterial color={skinColor} roughness={0.5} />
-        </mesh>
-        {/* Boot */}
-        <mesh position={[0, -0.85, 0.06]} castShadow>
-          <boxGeometry args={[0.2, 0.12, 0.35]} />
-          <meshStandardMaterial color={bootColor} roughness={0.3} metalness={0.1} />
-        </mesh>
-      </group>
+      )}
     </group>
   );
 }
-
-export default ThreePlayer;
